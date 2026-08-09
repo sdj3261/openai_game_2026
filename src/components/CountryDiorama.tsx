@@ -3,12 +3,13 @@ import { Engine } from '@babylonjs/core/Engines/engine'
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight'
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
-import { Texture } from '@babylonjs/core/Materials/Textures/texture'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector'
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder'
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode'
 import { Scene } from '@babylonjs/core/scene'
+import '@babylonjs/core/Shaders/default.fragment'
+import '@babylonjs/core/Shaders/default.vertex'
 import { useEffect, useRef } from 'react'
 import type { Biome, CountryProjection } from '../types'
 
@@ -58,17 +59,13 @@ export function CountryDiorama({ biome, projection, year }: Props) {
     const land = Color3.Lerp(Color3.FromHexString(palette.land), Color3.FromHexString('#a95936'), stress * 0.72)
     const high = Color3.Lerp(Color3.FromHexString(palette.high), Color3.FromHexString('#704032'), stress * 0.5)
     const flood = projection.seaLevelCm > 55 ? 1 : 0
-    const terrainTexture = new Texture(`${import.meta.env.BASE_URL}assets/earth-surface-tile.webp`, scene, false, false, Texture.TRILINEAR_SAMPLINGMODE)
-    terrainTexture.uScale = 0.88
-    terrainTexture.vScale = 0.88
-    terrainTexture.anisotropicFilteringLevel = 4
     const landMaterial = new StandardMaterial('terrain-land', scene)
     landMaterial.diffuseColor = land
-    landMaterial.diffuseTexture = terrainTexture
+    landMaterial.ambientColor = land.scale(0.42)
     landMaterial.specularColor = Color3.Black()
     const highMaterial = new StandardMaterial('terrain-high', scene)
     highMaterial.diffuseColor = high
-    highMaterial.diffuseTexture = terrainTexture
+    highMaterial.ambientColor = high.scale(0.38)
     highMaterial.specularColor = Color3.Black()
     const waterMaterial = new StandardMaterial('terrain-water', scene)
     waterMaterial.diffuseColor = Color3.FromHexString(palette.water)

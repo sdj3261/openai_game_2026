@@ -1,10 +1,9 @@
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera'
 import { Engine } from '@babylonjs/core/Engines/engine'
 import { WebGPUEngine } from '@babylonjs/core/Engines/webgpuEngine'
-import { GlowLayer } from '@babylonjs/core/Layers/glowLayer'
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight'
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight'
-import { PointLight } from '@babylonjs/core/Lights/pointLight'
+import { Material } from '@babylonjs/core/Materials/material'
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
 import { Texture } from '@babylonjs/core/Materials/Textures/texture'
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color'
@@ -13,6 +12,10 @@ import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder'
 import { Mesh } from '@babylonjs/core/Meshes/mesh'
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode'
 import { Scene } from '@babylonjs/core/scene'
+import '@babylonjs/core/Shaders/default.fragment'
+import '@babylonjs/core/Shaders/default.vertex'
+import '@babylonjs/core/ShadersWGSL/default.fragment'
+import '@babylonjs/core/ShadersWGSL/default.vertex'
 import { useEffect, useRef } from 'react'
 import type { CountryProfile, MigrationSummary, WorldSnapshot } from '../types'
 
@@ -27,6 +30,7 @@ interface Props {
 }
 
 type BabylonEngine = Engine | WebGPUEngine
+const EARTH_RADIUS = 1.46
 
 interface MigrationVisual {
   line: Mesh
@@ -46,7 +50,8 @@ interface SceneController {
 }
 
 async function createEngine(canvas: HTMLCanvasElement): Promise<{ engine: BabylonEngine; label: string }> {
-  if (await WebGPUEngine.IsSupportedAsync) {
+  const forceWebGl = new URLSearchParams(window.location.search).get('renderer') === 'webgl'
+  if (!forceWebGl && await WebGPUEngine.IsSupportedAsync) {
     try {
       const engine = new WebGPUEngine(canvas, { antialias: true })
       await engine.initAsync()
@@ -86,46 +91,40 @@ function writeMatrix(target: Float32Array, offset: number, position: Vector3, sc
 }
 
 function cellColor(world: WorldSnapshot, index: number, globalTemperature: number, cleanEnergy: number) {
-  const variation = ((index * 47) % 19) / 18
-  if (!world.land[index]) {
-    const ocean = Color3.Lerp(
-      Color3.FromHexString('#063253'),
-      Color3.FromHexString('#126b86'),
-      0.3 + variation * 0.28,
-    )
-    return new Color4(ocean.r, ocean.g, ocean.b, 1)
-  }
-
   const heat = Math.max(0, Math.min(1, (globalTemperature - 1.35) / 2.35))
   const disaster = world.disaster[index]
-  if (disaster) return Color4.FromHexString(disaster === 2 ? '#36a8f0ff' : disaster === 3 ? '#ffb13bff' : '#ff493fff')
-  const biomeColors = ['#0b526e', '#72b85d', '#1f8f58', '#d09a4d', '#6f9e78', '#d8f3ee']
-  const base = Color3.FromHexString(biomeColors[world.biome[index]] ?? '#5f9160')
-  const stressed = Color3.FromHexString(world.water[index] < 28 ? '#d56b32' : '#c48642')
-  const localStress = Math.max(0, 0.62 - world.habitability[index]) * 1.05
-    + Math.max(0, 38 - world.water[index]) / 95
-    + world.migrationPressure[index] * 0.18
-  const color = Color3.Lerp(base, stressed, Math.min(0.88, heat * 0.44 + localStress))
-  color.scaleInPlace(0.9 + variation * 0.17)
-  if (cleanEnergy > 58 && index % 157 === 0) return new Color4(0.42, 1, 0.82, 1)
-  return new Color4(color.r, color.g, color.b, 1)
+  if (disaster) return Color4.FromHexString(disaster === 2 ? '#58c8ffff' : disaster === 3 ? '#ffb347ff' : '#ff5c4dff')
+
+  const scarcity = Math.max(0, 42 - world.water[index]) / 42 * 0.34
+    + Math.max(0, 44 - world.food[index]) / 44 * 0.28
+  const localStress = Math.max(0, 0.58 - world.habitability[index]) * 0.9
+    + world.migrationPressure[index] * 0.34
+    + scarcity
+  const stress = Math.min(1, heat * 0.3 + localStress)
+  const stable = Color3.FromHexString('#4ce0b1')
+  const strained = Color3.FromHexString('#ffc45c')
+  const critical = Color3.FromHexString('#ff654f')
+  const color = stress < 0.62
+    ? Color3.Lerp(stable, strained, stress / 0.62)
+    : Color3.Lerp(strained, critical, (stress - 0.62) / 0.38)
+  if (cleanEnergy > 58 && index % 157 === 0) return new Color4(0.42, 1, 0.82, 0.72)
+  return new Color4(color.r, color.g, color.b, 0.14 + stress * 0.42)
 }
 
 function updateTiles(controller: SceneController, world: WorldSnapshot, temperature: number, cleanEnergy: number) {
   const matrices = new Float32Array(world.cellCount * 16)
   const colors = new Float32Array(world.cellCount * 4)
-  // Fibonacci cells are ~0.075 units apart at 5K density. Keeping tiles near
-  // that footprint closes the gaps that previously exposed the teal core.
-  const cellSize = world.cellCount >= 5000 ? 0.068 : 0.082
   for (let index = 0; index < world.cellCount; index += 1) {
+    if (!world.land[index]) {
+      writeMatrix(matrices, index * 16, Vector3.Zero(), Vector3.Zero(), Quaternion.Identity())
+      continue
+    }
     const normal = latLonToVector(world.latitude[index], world.longitude[index], 1).normalize()
-    const isLand = world.land[index] === 1
-    const cityLift = world.population[index] > 12 ? 0.018 : 0
-    const terrainLift = isLand ? 0.065 + world.habitability[index] * 0.04 + cityLift : 0.022
-    const tileWidth = isLand ? cellSize : cellSize * 0.91
-    const position = normal.scale(1.435 + terrainLift * 0.5)
-    writeMatrix(matrices, index * 16, position, new Vector3(tileWidth, terrainLift, tileWidth), normalQuaternion(normal))
     const color = cellColor(world, index, temperature, cleanEnergy)
+    const stressed = color.a > 0.42
+    const dotWidth = world.disaster[index] ? 0.042 : stressed ? 0.027 : 0.018
+    const position = normal.scale(EARTH_RADIUS + 0.005)
+    writeMatrix(matrices, index * 16, position, new Vector3(dotWidth, 1, dotWidth), normalQuaternion(normal))
     const colorOffset = index * 4
     colors[colorOffset] = color.r
     colors[colorOffset + 1] = color.g
@@ -143,19 +142,19 @@ function updateCities(controller: SceneController, world: WorldSnapshot) {
     if (world.cityState[index] > 0 && world.population[index] > 4.5) cityIndices.push(index)
   }
   cityIndices.sort((a, b) => world.population[b] - world.population[a])
-  const visible = cityIndices.slice(0, 340)
+  const visible = cityIndices.slice(0, 220)
   const matrices = new Float32Array(visible.length * 16)
   const colors = new Float32Array(visible.length * 4)
   visible.forEach((cellIndex, visualIndex) => {
     const normal = latLonToVector(world.latitude[cellIndex], world.longitude[cellIndex], 1).normalize()
     const status = world.cityState[cellIndex]
-    const livingHeight = 0.065 + Math.min(0.22, Math.sqrt(world.population[cellIndex]) * 0.022)
-    const height = status === 4 ? 0.018 : status === 1 ? livingHeight * 1.18 : livingHeight
-    const width = status === 4 ? 0.052 : 0.026 + Math.min(0.026, Math.sqrt(world.population[cellIndex]) * 0.003)
+    const livingHeight = 0.025 + Math.min(0.065, Math.sqrt(world.population[cellIndex]) * 0.007)
+    const height = status === 4 ? 0.012 : status === 1 ? livingHeight * 1.15 : livingHeight
+    const width = status === 4 ? 0.024 : 0.012 + Math.min(0.012, Math.sqrt(world.population[cellIndex]) * 0.0015)
     writeMatrix(
       matrices,
       visualIndex * 16,
-      normal.scale(1.54 + height * 0.5),
+      normal.scale(EARTH_RADIUS + 0.007 + height * 0.5),
       new Vector3(width, height, width),
       normalQuaternion(normal),
     )
@@ -171,7 +170,7 @@ function updateCities(controller: SceneController, world: WorldSnapshot) {
 }
 
 function curvePoints(from: Vector3, to: Vector3) {
-  const middle = from.add(to).scale(0.5).normalize().scale(2 + Vector3.Distance(from, to) * 0.22)
+  const middle = from.add(to).scale(0.5).normalize().scale(EARTH_RADIUS + 0.12 + Vector3.Distance(from, to) * 0.12)
   return Array.from({ length: 29 }, (_, index) => {
     const t = index / 28
     const inverse = 1 - t
@@ -191,31 +190,31 @@ function updateMigration(controller: SceneController, migration?: MigrationSumma
   clearMigration(controller)
   if (!migration?.routes.length) return
   for (let offset = 0; offset < migration.routes.length; offset += 5) {
-    const from = latLonToVector(migration.routes[offset], migration.routes[offset + 1], 1.62)
-    const to = latLonToVector(migration.routes[offset + 2], migration.routes[offset + 3], 1.62)
+    const from = latLonToVector(migration.routes[offset], migration.routes[offset + 1], EARTH_RADIUS + 0.028)
+    const to = latLonToVector(migration.routes[offset + 2], migration.routes[offset + 3], EARTH_RADIUS + 0.028)
     const points = curvePoints(from, to)
     const routeColor = Color3.FromHexString(migration.routes[offset + 4] > 0.5 ? '#ffd166' : '#70f6d2')
     const line = MeshBuilder.CreateTube(`migration-${offset}`, {
       path: points,
-      radius: migration.routes[offset + 4] > 0.5 ? 0.011 : 0.007,
-      tessellation: 5,
+      radius: migration.routes[offset + 4] > 0.5 ? 0.005 : 0.0032,
+      tessellation: 6,
       cap: Mesh.NO_CAP,
     }, controller.scene)
     const routeMaterial = new StandardMaterial(`migration-mat-${offset}`, controller.scene)
     routeMaterial.emissiveColor = routeColor
     routeMaterial.diffuseColor = routeColor
     routeMaterial.disableLighting = true
-    routeMaterial.alpha = 0.88
+    routeMaterial.alpha = 0.72
     line.material = routeMaterial
     line.parent = controller.root
-    const dots = Array.from({ length: 3 }, (_, dotIndex) => {
-      const dot = MeshBuilder.CreateSphere(`flow-${offset}-${dotIndex}`, { diameter: 0.042, segments: 7 }, controller.scene)
+    const dots = Array.from({ length: 2 }, (_, dotIndex) => {
+      const dot = MeshBuilder.CreateSphere(`flow-${offset}-${dotIndex}`, { diameter: 0.022, segments: 7 }, controller.scene)
       const material = new StandardMaterial(`flow-mat-${offset}-${dotIndex}`, controller.scene)
       material.emissiveColor = routeColor
       material.diffuseColor = routeColor
       material.disableLighting = true
       dot.material = material
-      dot.metadata = { phase: dotIndex / 3 + offset * 0.011 }
+      dot.metadata = { phase: dotIndex / 2 + offset * 0.011 }
       dot.parent = controller.root
       return dot
     })
@@ -225,8 +224,11 @@ function updateMigration(controller: SceneController, migration?: MigrationSumma
 
 function updateMarker(controller: SceneController, country: CountryProfile) {
   const normal = latLonToVector(country.lat, country.lon, 1).normalize()
-  controller.marker.position.copyFrom(normal.scale(1.7))
+  controller.marker.position.copyFrom(normal.scale(EARTH_RADIUS + 0.012))
   controller.marker.rotationQuaternion = normalQuaternion(normal)
+  // Center a searched country on the visible meridian. The globe still moves,
+  // but slowly enough that the selected marker remains useful during a turn.
+  controller.root.rotation.y = Math.PI / 2 - country.lon * Math.PI / 180
 }
 
 async function setupScene(canvas: HTMLCanvasElement, onEngineChange?: (label: string) => void) {
@@ -235,9 +237,9 @@ async function setupScene(canvas: HTMLCanvasElement, onEngineChange?: (label: st
   engine.setHardwareScalingLevel(Math.max(1, window.devicePixelRatio / 1.65))
   const scene = new Scene(engine)
   scene.clearColor = new Color4(0, 0, 0, 0)
-  scene.ambientColor = Color3.FromHexString('#263d35')
-  scene.imageProcessingConfiguration.contrast = 1.22
-  scene.imageProcessingConfiguration.exposure = 1.02
+  scene.ambientColor = Color3.FromHexString('#17232d')
+  scene.imageProcessingConfiguration.contrast = 1.04
+  scene.imageProcessingConfiguration.exposure = 1
 
   const camera = new ArcRotateCamera('orbital-camera', -Math.PI / 2, Math.PI / 2.2, 5.25, Vector3.Zero(), scene)
   camera.lowerRadiusLimit = 3.5
@@ -250,56 +252,56 @@ async function setupScene(canvas: HTMLCanvasElement, onEngineChange?: (label: st
   // ArcRotateCamera starts on the -Z hemisphere, so the key must travel
   // toward +Z to illuminate the face presented to the player.
   const key = new DirectionalLight('sun', new Vector3(-0.45, -0.35, 1), scene)
-  key.intensity = 2.25
-  key.diffuse = Color3.FromHexString('#fff0c8')
+  key.intensity = 1.12
+  key.diffuse = Color3.FromHexString('#fff8e8')
   const fill = new HemisphericLight('sky', new Vector3(0, 1, 0), scene)
-  fill.intensity = 0.72
-  fill.diffuse = Color3.FromHexString('#9ae8d0')
-  fill.groundColor = Color3.FromHexString('#07131e')
-  const rim = new PointLight('rim', new Vector3(-4, -1, -3), scene)
-  rim.diffuse = Color3.FromHexString('#2079ff')
-  rim.intensity = 5.5
+  fill.intensity = 0.38
+  fill.diffuse = Color3.FromHexString('#b8d7eb')
+  fill.groundColor = Color3.FromHexString('#02070c')
 
   const root = new TransformNode('living-earth', scene)
   root.rotation = new Vector3(0.08, -0.62, -0.12)
-  const core = MeshBuilder.CreateSphere('planet-core', { diameter: 2.84, segments: 48 }, scene)
+  const core = MeshBuilder.CreateSphere('planet-core', { diameter: EARTH_RADIUS * 2, segments: 64 }, scene)
   core.parent = root
   const coreMaterial = new StandardMaterial('planet-core-material', scene)
-  coreMaterial.diffuseColor = Color3.FromHexString('#03131d')
-  coreMaterial.specularColor = Color3.FromHexString('#071b22')
-  coreMaterial.specularPower = 112
-  coreMaterial.roughness = 0.8
-  const earthAlbedo = new Texture(`${import.meta.env.BASE_URL}assets/earth-game-albedo-v2.webp`, scene, false, false)
+  coreMaterial.diffuseColor = Color3.White()
+  coreMaterial.specularColor = Color3.Black()
+  coreMaterial.roughness = 0.72
+  const earthAlbedo = new Texture(`${import.meta.env.BASE_URL}assets/earth-blue-marble-nasa.webp`, scene, false, false, Texture.TRILINEAR_SAMPLINGMODE)
   earthAlbedo.gammaSpace = true
-  earthAlbedo.uScale = -1
-  earthAlbedo.uOffset = 1
+  earthAlbedo.anisotropicFilteringLevel = 8
+  // Babylon's sphere starts longitude 0 at U=0; NASA's plate carrée starts at -180°.
+  earthAlbedo.uOffset = 0.5
   coreMaterial.diffuseTexture = earthAlbedo
   coreMaterial.emissiveTexture = earthAlbedo
-  coreMaterial.emissiveColor = Color3.FromHexString('#25362f')
+  coreMaterial.emissiveColor = Color3.FromHexString('#12171b')
   core.material = coreMaterial
 
-  const atmosphere = MeshBuilder.CreateSphere('atmosphere', { diameter: 3.14, segments: 40 }, scene)
+  const atmosphere = MeshBuilder.CreateSphere('atmosphere', { diameter: (EARTH_RADIUS + 0.055) * 2, segments: 48 }, scene)
   atmosphere.parent = root
   const atmosphereMaterial = new StandardMaterial('atmosphere-material', scene)
-  atmosphereMaterial.emissiveColor = Color3.FromHexString('#49cfff')
-  atmosphereMaterial.alpha = 0.026
+  atmosphereMaterial.emissiveColor = Color3.FromHexString('#62bfff')
+  atmosphereMaterial.alpha = 0.038
   atmosphereMaterial.backFaceCulling = false
   atmosphereMaterial.disableDepthWrite = true
   atmosphereMaterial.disableLighting = true
   atmosphere.material = atmosphereMaterial
 
-  const tiles = MeshBuilder.CreateBox('geodesic-cells', { size: 1 }, scene)
+  const tiles = MeshBuilder.CreateCylinder('climate-cells', { diameter: 1, height: 0.006, tessellation: 6 }, scene)
   tiles.parent = root
   tiles.alwaysSelectAsActiveMesh = true
   tiles.useVertexColors = true
+  tiles.hasVertexAlpha = true
   const tileMaterial = new StandardMaterial('cell-material', scene)
   tileMaterial.diffuseColor = Color3.White()
-  tileMaterial.ambientColor = Color3.FromHexString('#7d9188')
-  tileMaterial.specularColor = Color3.FromHexString('#1c2e28')
-  tileMaterial.roughness = 0.88
+  tileMaterial.emissiveColor = Color3.White()
+  tileMaterial.specularColor = Color3.Black()
+  tileMaterial.disableLighting = true
+  tileMaterial.disableDepthWrite = true
+  tileMaterial.transparencyMode = Material.MATERIAL_ALPHABLEND
   tiles.material = tileMaterial
 
-  const cities = MeshBuilder.CreateBox('city-signals', { size: 1 }, scene)
+  const cities = MeshBuilder.CreateCylinder('city-signals', { diameter: 1, height: 1, tessellation: 6 }, scene)
   cities.parent = root
   cities.alwaysSelectAsActiveMesh = true
   cities.useVertexColors = true
@@ -312,14 +314,14 @@ async function setupScene(canvas: HTMLCanvasElement, onEngineChange?: (label: st
 
   const marker = new TransformNode('selected-country', scene)
   marker.parent = root
-  const markerRing = MeshBuilder.CreateTorus('selected-ring', { diameter: 0.23, thickness: 0.022, tessellation: 32 }, scene)
+  const markerRing = MeshBuilder.CreateTorus('selected-ring', { diameter: 0.105, thickness: 0.008, tessellation: 32 }, scene)
   markerRing.parent = marker
   const markerMaterial = new StandardMaterial('selected-material', scene)
   markerMaterial.emissiveColor = Color3.FromHexString('#efff9c')
   markerMaterial.disableLighting = true
   markerRing.material = markerMaterial
-  const markerPin = MeshBuilder.CreateCylinder('selected-pin', { height: 0.19, diameterTop: 0.025, diameterBottom: 0.065, tessellation: 8 }, scene)
-  markerPin.position.y = 0.15
+  const markerPin = MeshBuilder.CreateCylinder('selected-pin', { height: 0.075, diameterTop: 0.012, diameterBottom: 0.03, tessellation: 8 }, scene)
+  markerPin.position.y = 0.047
   markerPin.parent = marker
   markerPin.material = markerMaterial
 
@@ -328,21 +330,16 @@ async function setupScene(canvas: HTMLCanvasElement, onEngineChange?: (label: st
   orbit.rotation.z = -0.22
   const orbitMaterial = new StandardMaterial('orbit-material', scene)
   orbitMaterial.emissiveColor = Color3.FromHexString('#59e4c2')
-  orbitMaterial.alpha = 0.2
+  orbitMaterial.alpha = 0.08
   orbitMaterial.disableLighting = true
   orbit.material = orbitMaterial
-
-  const glow = new GlowLayer('civilization-glow', scene, { blurKernelSize: 18 })
-  glow.intensity = 0.38
-  glow.addExcludedMesh(core)
-  glow.addExcludedMesh(tiles)
 
   const controller: SceneController = { engine, scene, root, tiles, cities, marker, migration: [] }
   let elapsed = 0
   scene.onBeforeRenderObservable.add(() => {
     const delta = engine.getDeltaTime() / 1000
     elapsed += delta
-    controller.root.rotation.y += delta * 0.025
+    controller.root.rotation.y += delta * 0.003
     const pulse = 1 + Math.sin(elapsed * 3.2) * 0.11
     controller.marker.scaling.setAll(pulse)
     controller.migration.forEach(({ dots, points }) => {

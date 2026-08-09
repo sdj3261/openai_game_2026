@@ -9,14 +9,14 @@ GAIA//2126은 별도 설치와 로그인 없이 심사 링크에서 바로 실�
 3. **결정론** — 같은 상태와 선택은 같은 결과를 내 테스트와 밸런싱이 가능하다.
 4. **가시성** — 정책에서 이주·도시 변화까지의 인과를 UI와 3D가 같은 상태로 표현한다.
 5. **확장성** — 5,000셀 MVP를 버리지 않고 20,000셀, 이후 100,000셀 GPU 계산으로 확장한다.
-6. **정적 배포** — Challenge MVP에는 백엔드 장애 지점이 없다.
+6. **정적 코어** — Challenge 플레이는 선택형 순위 API가 중단되어도 끝까지 동작한다.
 
 ## 2. 기술 스택
 
 | 계층 | 기술 | 역할 |
 |---|---|---|
 | App/UI | React 19, TypeScript, Vite | 대시보드, 정책/사건 입력, 결과 화면, 빌드 |
-| Styling | Tailwind CSS | 반응형 레이아웃과 디자인 토큰 |
+| Styling | 프로젝트 CSS 디자인 시스템 | 운영실형 레이아웃, 상태·반응형·접근성 토큰 |
 | State | Zustand | UI와 렌더러가 공유하는 최소 게임 상태 |
 | 3D | Babylon.js | 지구, 인스턴스, 카메라, 파티클, 후처리 |
 | Graphics backend | WebGPU 우선, WebGL2 폴백 | 지원 환경에서 최신 GPU 경로, 그 외 안정 경로 |
@@ -25,8 +25,8 @@ GAIA//2126은 별도 설치와 로그인 없이 심사 링크에서 바로 실�
 | Save | IndexedDB | 계정 없는 로컬 자동 저장 |
 | Test | Vitest | 공식, 경계값, 결정론, 저장 형식 회귀 테스트 |
 | Later | Rust + WebAssembly | 검증된 무거운 CPU 커널만 선택 이식 |
-| Later backend | Go, PostgreSQL | 검증된 네트워크 run과 시즌 순위표가 필요할 때 도입 |
-| Scale cache | Redis | 실제 트래픽에서 순위 조회/집계 병목이 확인될 때만 도입 |
+| Optional leaderboard API | Cloudflare Worker + D1 | 전체 v1 선택 로그 재실행, verified run 저장·조회 |
+| Later scale option | Go/PostgreSQL, Redis | D1의 측정된 운영 한계를 넘을 때만 검토 |
 
 ## 3. 런타임 구조
 
@@ -54,6 +54,10 @@ Dedicated Web Worker
                    │ snapshot / summary
                    ▼
 IndexedDB autosave
+
+Optional, separately deployed
+Browser ── GET/POST /leaderboard ── Cloudflare Worker ── D1
+          failure/URL 없음 → localStorage `LOCAL DEMO`
 ```
 
 핵심 규칙은 **React가 시뮬레이션하지 않고 Babylon.js가 게임 규칙을 결정하지 않는다**는 것이다. Worker가 진실의 원천인 세계 상태를 계산하고, Zustand는 화면에 필요한 스냅샷과 입력 상태를 조정한다.
@@ -114,6 +118,8 @@ WebGPU는 필수 조건이 아니다. **게임 로직과 콘텐츠는 두 경로
 - 이주 경로: 상위 N개 아크 라인 + 흐르는 입자
 - 재난: 셀별 대표 파티클/데칼만 생성
 - 국가 포커스: 위·경도 좌표를 구면 좌표로 변환해 마커와 카메라 타깃 설정
+
+지리 베이스는 생성형 알베도가 아니라 NASA SVS의 2048×1024 Blue Marble 래스터를 WebP로 최적화한 `earth-blue-marble-nasa.webp`다. 시작 화면과 Babylon.js 지구가 같은 실제 지리 기준을 공유하며, 셀·도시·이주·위험은 그 위에 게임 상태 오버레이로 표시한다. Imagegen 에셋은 지도로 오인될 수 없는 궤도 관측 배경에만 사용한다. 출처·해시·변환 기록은 [`ASSET_PROVENANCE.md`](./ASSET_PROVENANCE.md)에 고정한다.
 
 시뮬레이션의 5,000개 셀이 5,000개의 복잡한 게임 오브젝트가 되지 않게 한다. 렌더 데이터는 색, 높이, 상태, 위치 버퍼로 압축하고 하나의 메시/재질군에서 그린다.
 
@@ -301,23 +307,23 @@ interface LeaderboardEntry {
 
 로컬 제출 entry는 항상 `verified: false`다. 저장 실패 시에도 현재 run 결과 대시보드를 먼저 표시해 결말 흐름을 막지 않는다. 장기적으로 기록이 커질 때만 기존 IndexedDB와 통합을 검토한다.
 
-### 10.3 선택형 REST API 계약
+### 10.3 구현된 선택형 REST API 계약
 
-공유 서비스는 아직 배포되지 않았다. 배포 주소가 생겼을 때만 빌드 환경의 `VITE_LEADERBOARD_API_URL`을 설정하며, 클라이언트는 다음 두 endpoint를 호출한다.
+`services/leaderboard-worker`에 Cloudflare Worker + D1 API, migration, golden fixture와 HTTP/검증 테스트가 구현되어 있다. **코드와 로컬 검증은 완료했지만 외부 Worker/D1은 아직 배포하지 않았다.** 배포 주소가 생겼을 때만 빌드 환경의 `VITE_LEADERBOARD_API_URL`을 설정하며, 기본 GitHub Pages는 계속 `LOCAL DEMO`다.
 
 ```http
 GET  {VITE_LEADERBOARD_API_URL}/leaderboard
 POST {VITE_LEADERBOARD_API_URL}/leaderboard
 ```
 
-`GET`은 `LeaderboardEntry[]` JSON을 반환한다. 4초 안에 성공하지 않거나 스키마가 맞지 않으면 클라이언트는 자동으로 `LOCAL DEMO` 보드를 사용한다.
+`GET /leaderboard?limit=50`은 생존 연도 → 점수 → 낮은 기온 순으로 서버가 저장한 `verified` entry만 반환한다. 클라이언트에서 4초 안에 성공하지 않거나 응답 스키마가 맞지 않으면 자동으로 `LOCAL DEMO` 보드를 사용한다.
 
 현재 `POST` 요청 계약:
 
 ```json
 {
   "entry": {
-    "id": "client-temporary-id",
+    "id": "dc7192d4-65cf-4b36-9ad9-9f576f6c55ec",
     "callsign": "BLUE DOT",
     "score": 947,
     "endYear": 2126,
@@ -332,6 +338,7 @@ POST {VITE_LEADERBOARD_API_URL}/leaderboard
   },
   "proof": {
     "simulationVersion": 1,
+    "scenarioId": "earth-2026-standard",
     "seed": 0,
     "actions": [
       { "turn": 0, "year": 2026, "policyIds": ["solar-cities"], "eventChoiceId": "coalition" }
@@ -340,42 +347,29 @@ POST {VITE_LEADERBOARD_API_URL}/leaderboard
 }
 ```
 
-5초 안에 성공한 `POST`는 서버가 정규화하고 저장한 `LeaderboardEntry`를 반환한다. 실패/timeout이면 클라이언트는 완주 기록을 잃지 않도록 로컬에 저장하고 `verified: false`로 유지한다.
+5초 안에 성공한 `POST`는 Worker가 검증·정규화하고 D1에 저장한 `LeaderboardEntry`를 반환한다. 실패/timeout이면 클라이언트는 완주 기록을 잃지 않도록 로컬에 저장하고 `verified: false`로 유지한다.
 
-Go API의 최소 보안 계약:
+현재 proof v1은 `simulationVersion + scenarioId(선택, 서버 기본값 사용 가능) + seed + turn별 actions`다. 별도의 `history`나 최종 `policyLevels`를 신뢰 자료로 받지 않는다. Worker가 2026년 초기 상태에서 1–20턴의 정책·사건 로그를 순서대로 다시 적용해 정책 레벨, 기금, 배출, 기온, 자연, 신뢰, 경제, 회복력과 청정에너지를 재구성한다. 따라서 **v1 순위 점수에 필요한 전역 게임 상태는 서버에서 완전히 재실행**된다. 5,000셀 공간 스냅샷은 현재 순위 점수의 입력이 아니므로 proof에 싣지 않는다.
 
-1. 인증, rate limit, payload 크기와 규칙 버전 검사
-2. `callsign`을 길이 제한·정규화하고 HTML로 해석하지 않음
-3. `simulationVersion`과 `seed`가 해당 시즌에서 허용됐는지 확인
-4. 매 턴의 연도·정책 수·비용·최대 레벨과 사건 선택 ID를 검증
-5. 같은 시뮬레이션 버전과 seed로 `actions` 전체를 처음부터 결정론적으로 재실행
-6. 재실행한 최종 기온·자연·신뢰·회복력·종료 연도와 score가 entry와 일치하는지 확인
-7. grade와 strategy 태그를 서버에서 다시 생성; 클라이언트 값은 무시
-8. 서버가 `id`, `submittedAt`, `verified`를 발급
-9. PostgreSQL transaction으로 저장 후 정규화된 entry 반환
+Worker의 실제 검증 순서:
 
-현재 클라이언트 proof는 `simulationVersion + seed + turn별 actions`를 포함하므로 서버 재실행에 필요한 핵심 입력을 보존한다. 다만 이 저장소에는 아직 공유 Go API가 배포되어 있지 않아 Challenge 빌드는 `LOCAL DEMO`로 표시하며, 로컬 기록에는 `verified: false`만 부여한다. 공개 시즌 운영 전에는 `scenarioId`, 서명된 시즌 seed, 인증과 rate limit을 더해 서버가 재실행 결과와 entry가 완전히 일치할 때만 `verified: true`를 발급한다.
+1. JSON, 32 KiB 본문, UUID v4, callsign, 수치 범위와 배열 길이를 경계에서 검사
+2. `simulationVersion`, `scenarioId`, season에서 허용한 seed 확인
+3. 매 턴의 연도·순서·정책 1–2개·중복·비용·최대 레벨과 사건 선택 ID 검증
+4. `gaia-global-v1-2026-08-10` 규칙으로 액션 전체를 시작 상태부터 결정론적으로 재실행
+5. 서버 계산 종료 연도·기온·자연·신뢰·회복력·점수·등급·전략 태그와 client entry를 모두 비교
+6. 하나라도 다르면 `422 verified:false`로 거부하고 D1에 쓰지 않음
+7. 통과하면 서버 ID·시각과 `verified:true`를 발급하고 D1 prepared statement로 저장
 
-공개 시즌 proof 확장 예시:
+추가 통제:
 
-```json
-{
-  "simulationVersion": 1,
-  "scenarioId": "earth-2026-standard",
-  "seed": 326132,
-  "actions": [
-    { "turn": 0, "year": 2026, "policyIds": ["solar-cities"], "eventChoiceId": "coalition" }
-  ]
-}
-```
+- 정확한 CORS origin allowlist와 `nosniff`/CSP/`no-referrer` 응답 헤더
+- Cloudflare Rate Limiting binding이 없으면 `503`으로 닫는 fail-closed 동작
+- NFKC callsign 정규화, 제어·방향 문자 제거, 허용 문자와 18자 제한
+- `(season_id, client_submission_id)` 고유 인덱스와 `Idempotency-Key` 재시도 계약
+- proof JSON과 SHA-256 감사 인덱스; IP/User-Agent는 D1에 저장하지 않음
 
-Go API의 proof 처리 순서:
-
-1. seed와 시나리오가 해당 시즌에 허용됐는지 확인
-2. 매 턴 정책 수, 비용, 최대 레벨과 사건 선택의 유효성 검사
-3. 서버에서 전체 선택 로그를 결정론적으로 재실행
-4. 서버 결과와 entry가 다르면 거부하고 기록하지 않음
-5. 서버 계산 최종 지표·점수·태그만 verified run으로 저장
+`verified`는 규칙과 결과의 무결성을 뜻하며 인간의 직접 플레이나 1인 1기록을 증명하지 않는다. 공개 경쟁 시즌 전에는 Hive/계정 인증, 서명된 단회 season nonce, 계정별 제출 정책과 봇 완화를 추가한다.
 
 응답 예:
 
@@ -396,36 +390,31 @@ Go API의 proof 처리 순서:
 }
 ```
 
-### 10.4 PostgreSQL과 Redis 도입 기준
+### 10.4 현재 D1 스키마와 이후 확장 기준
 
-초기 네트워크 버전은 **Go + PostgreSQL만** 사용한다. PostgreSQL이 run의 유일한 진실 원천이다.
-
-핵심 컬럼:
+현재 구현의 진실 원천은 Cloudflare D1의 `leaderboard_runs`다. 핵심 컬럼은 다음과 같다.
 
 ```text
 leaderboard_runs(
-  id, account_id, season_id, simulation_version, scenario_id, seed,
-  proof_json, end_year, score,
-  temperature, nature, trust, resilience, strategy_tags,
-  verified_at
+  id, client_submission_id, season_id, scenario_id,
+  simulation_version, ruleset_id, seed,
+  proof_json, proof_sha256, callsign,
+  end_year, score, grade, temperature,
+  nature, trust, resilience, strategy_json,
+  verified, submitted_at, verified_at
 )
 ```
 
 핵심 인덱스:
 
 ```sql
-(season_id, simulation_version, end_year DESC, score DESC)
+(season_id, verified DESC, end_year DESC, score DESC,
+ temperature ASC, submitted_at ASC)
 ```
 
-Go의 규칙 구현과 브라우저 TypeScript가 어긋나지 않도록 고정 seed/선택 로그/기대 결과의 golden fixture를 양쪽에서 실행한다. 장기적으로 Rust 코어가 검증되면 서버 native library와 브라우저 WASM이 같은 규칙을 공유할 수 있다.
+Worker의 TypeScript 규칙과 브라우저 규칙이 어긋나지 않도록 고정 seed/선택 로그/기대 결과의 golden fixture를 실행한다. 현재 Worker 테스트는 정상 완주, 결과 변조, 정책 비용·최대 레벨, 사건·턴 순서, CORS, rate limit, 멱등 충돌과 저장/정렬 계약을 다룬다.
 
-Redis는 처음부터 배치하지 않는다. 다음 조건이 측정으로 확인될 때만 추가한다.
-
-- 상위 N개 순위 조회가 PostgreSQL의 목표 p95를 지속적으로 넘음
-- 시즌 마감 또는 공동 목표 집계가 DB 부하를 유발함
-- 여러 API 인스턴스 사이의 rate limit 공유가 필요함
-
-이때도 Redis는 상위 순위 캐시, 짧은 집계, rate limit에만 사용하고 verified run 원본은 PostgreSQL에 둔다. 캐시가 비어도 정확한 순위를 DB에서 복구할 수 있어야 한다.
+처음부터 Go/PostgreSQL/Redis로 교체하지 않는다. D1의 쓰기량·목록 조회 p95·보존 용량·시즌 집계가 실제 목표를 지속적으로 넘을 때만 Go/PostgreSQL 이관을 검토한다. Redis 역시 다중 인스턴스 캐시나 집계 병목이 측정된 뒤에만 추가하며, 어느 저장소를 쓰더라도 verified run의 영속 원본과 재실행 규칙은 하나여야 한다.
 
 ## 11. 성능 예산
 
@@ -474,7 +463,7 @@ Redis는 처음부터 배치하지 않는다. 다음 조건이 측정으로 확�
 - 저장 → 새 세션 → 복구 후 같은 다음 턴 결과
 - 생존 연도 우선, 동일 연도에서 종합 점수 우선 정렬
 - 정책 로그에서 전략 태그를 같은 방식으로 재생성
-- 클라이언트 claimed score 변조 시 서버 검증 거부(네트워크 단계)
+- 클라이언트 claimed score·등급·전략 태그 변조 시 Worker 재실행 검증 거부
 
 ### 브라우저 E2E 체크리스트
 
@@ -489,7 +478,7 @@ Redis는 처음부터 배치하지 않는다. 다음 조건이 측정으로 확�
 
 ## 14. 보안과 개인정보
 
-MVP는 계정, 분석 SDK, 위치, 광고, 사용자 콘텐츠를 요구하지 않는다. 저장과 로컬 순위표는 사용자 브라우저 안에만 남는다. 외부 데이터 요청 없이 정적 자산만으로 한 판을 완료할 수 있게 한다. 향후 백엔드 도입 시 공개 닉네임, 선택 로그, 보존 기간, 동의와 삭제 정책을 별도로 설계한다. 클라이언트가 보낸 점수·태그·최종 지표는 표시 전에 서버 재실행 결과로 대체한다.
+기본 GitHub Pages는 계정, 분석 SDK, 위치, 광고를 요구하지 않으며 저장과 `LOCAL DEMO` 순위가 브라우저 안에만 남는다. 외부 요청 없이 한 판을 완료할 수 있다. 선택형 Worker를 향후 배포하면 공개 callsign과 선택 로그가 D1에 저장되므로 배포 전에 보존 기간·삭제 절차·개인정보 고지를 확정한다. Worker는 클라이언트가 보낸 점수·태그·최종 지표를 그대로 공개하지 않고 전체 v1 로그 재실행이 일치한 기록만 저장한다.
 
 ## 15. 배포
 
@@ -508,7 +497,7 @@ push to main
 
 배포 URL: `https://sdj3261.github.io/openai_game_2026/`
 
-정적 배포이므로 Worker URL과 자산 URL은 Vite import를 통해 생성하고, 루트 절대 경로 하드코딩을 피한다.
+이 URL은 정적 게임만 배포하며 `VITE_LEADERBOARD_API_URL`을 비워 둔 `LOCAL DEMO`다. Cloudflare Worker와 D1은 별도 서비스로 구현되어 있으나 외부 배포하지 않았다. 향후 API를 배포해도 URL이 없거나 실패하면 클라이언트가 즉시 localStorage 보드로 폴백한다. 정적 자산 URL은 Vite base path를 사용하고, Worker API origin은 빌드 환경 변수 하나로만 주입한다.
 
 ## 16. 단계별 확장 로드맵
 
@@ -560,11 +549,11 @@ WASM 도입 자체를 성과로 삼지 않는다. JS↔WASM 경계를 턴당 1�
 
 ### Phase 5 — 서비스 확장
 
-- 현재: 네트워크 요청 없는 로컬 결과/기준 시나리오 순위표
-- Go REST API: 계정, 선택 로그 재실행, 검증된 점수, 시나리오 배포
-- PostgreSQL: 사용자/verified run/시나리오의 유일한 영속 데이터
-- Redis: 측정된 규모가 요구할 때만 상위 순위·시즌 집계·rate limit 캐시
-- Hive: 인증·커뮤니티·이벤트·성과 공유와 연결 가능한 어댑터 계층
+- 기본 공개 페이지: 네트워크 요청 없는 로컬 결과/기준 시나리오 순위표
+- 구현 완료·미배포: Cloudflare Worker가 v1 선택 로그 전체를 재실행하고 D1에 verified run 저장
+- 배포 전: D1 생성/migration, 실제 Worker URL 연결, 보존·삭제 정책과 운영 모니터링
+- Hive: 인증 subject, 단회 season challenge, 커뮤니티 이벤트와 결과 공유 어댑터
+- 장기 규모 옵션: 측정된 D1 한계를 넘을 때만 Go/PostgreSQL 이관과 Redis 캐시 검토
 
 백엔드가 없어도 싱글 플레이는 계속 가능하게 하고, 서버 기능은 점진적 향상으로 제공한다.
 
@@ -577,12 +566,13 @@ WASM 도입 자체를 성과로 삼지 않는다. JS↔WASM 경계를 턴당 1�
 | 계산 위치 | Dedicated Worker | 메인 스레드 멈춤 방지 |
 | 개체 모델 | 셀 + 코호트 | 대규모 인구의 행동을 설명 가능하고 저렴하게 계산 |
 | 데이터 구조 | TypedArray SoA | 메모리, 순회, Worker/GPU/WASM 이식성 |
-| 초기 서버 | 없음 | 심사 플레이의 장애 지점과 운영 부담 제거 |
+| 심사 클라이언트 서버 의존성 | 없음 | API 미설정·장애에서도 완주와 로컬 결과 보장 |
+| 선택형 공유 순위 구현 | Cloudflare Worker + D1 | 정적 페이지와 독립 배포, 전체 v1 로그 재실행, 작은 운영 표면 |
 | 저장 | IndexedDB | 대형 TypedArray와 오프라인 정적 웹에 적합 |
 | GPU compute | MVP 이후 | 재미와 코어 루프 검증 전에 기술 난이도가 폭발하는 것을 방지 |
 | 현재 순위표 | 클라이언트 로컬 | 서버 없는 심사 빌드에서도 결과 비교를 제공하고 온라인인 척하지 않음 |
 | 네트워크 점수 | 서버 재실행 검증 | 클라이언트 변조와 규칙 버전 혼합 방지 |
-| 캐시 | Redis 후도입 | PostgreSQL로 충분한 단계의 운영 복잡도를 늘리지 않음 |
+| 캐시/대형 DB | 후도입 | D1의 측정된 한계가 확인되기 전에 운영 복잡도를 늘리지 않음 |
 
 ## 18. 금지할 안티패턴
 

@@ -249,15 +249,15 @@ Challenge 빌드의 전략 태그는 최종 `policyLevels`에서 투자 레벨�
 - `기술 가속`: 원자력·전력망·탄소 제거 등 고급 기술 투자 비중이 높음
 - `균형 설계자`: 네 포커스가 특정 축에 과도하게 쏠리지 않음
 
-Challenge 빌드에는 공유 서버가 없다. 대시보드는 현재 run, `localStorage`에 보관한 이 브라우저의 과거 run과 `LOCAL DEMO` 보드의 내장 샘플을 대상으로 **로컬 순위표**를 만든다. 화면에 `LOCAL DEMO`를 명시하고 실시간 접속자 수나 Hive 공유 순위라고 주장하지 않는다. 미래 네트워크 순위표가 연결되면 동일한 카드와 정렬 규칙을 그대로 사용한다.
+Challenge 공개 빌드에는 공유 서버 URL을 연결하지 않았다. 대시보드는 현재 run, `localStorage`에 보관한 이 브라우저의 과거 run과 `LOCAL DEMO` 보드의 내장 샘플을 대상으로 **로컬 순위표**를 만든다. 화면에 `LOCAL DEMO`를 명시하고 실시간 접속자 수나 Hive 공유 순위라고 주장하지 않는다. 저장소에는 전체 v1 선택 로그를 재실행하는 Cloudflare Worker+D1 서비스가 구현·테스트되어 있으나 아직 외부 배포하지 않았으며, 연결 후에도 동일한 카드와 정렬 규칙을 사용한다.
 
 ## 9. 3D 지구와 시각 방향
 
 ### 9.1 아트 콘셉트
 
-Google Earth식 사실 재현보다 **살아 있는 홀로그램 전략 테이블**을 지향한다. 낮은 폴리곤/복셀형 셀, 밝은 대기 테두리, 도시의 야간 불빛과 데이터 레이어를 결합한다.
+실제 지리는 NASA Blue Marble를 기준으로 먼저 정확히 읽히게 하고, 그 위에 **살아 있는 행성 운영 지도**를 구축한다. 절제된 대기권, 기후 셀, 도시 신호, 이주 아크와 데이터 레이어를 결합하되 과도한 네온·블룸이 대륙과 핵심 수치를 덮지 않게 한다. 생성형 이미지는 지도로 오인되지 않는 궤도 배경에만 쓴다.
 
-키워드: `solarpunk command center`, `voxel diorama`, `living systems`, `hope under pressure`.
+키워드: `planetary operations room`, `editorial cartography`, `living systems`, `hope under pressure`.
 
 ### 9.2 지구의 상태 변화
 
@@ -364,6 +364,8 @@ MVP에서는 접근 가능한 SVG 아이콘 컴포넌트를 사용하고, 이후
 - Rust/WASM으로 이식한 결정론적 시뮬레이션 코어
 - 사용자 제작 시나리오와 정책 모드
 - 서버 검증 점수, 시즌형 공동 목표
+
+공유 점수의 첫 구현은 Cloudflare Worker+D1으로 이미 준비되어 있다. 실제 배포와 Hive 인증은 출시 작업이며, Go/PostgreSQL/Redis는 D1의 측정된 운영 한계를 넘을 때만 검토한다.
 
 ## 15. 밸런싱 목표와 계측
 

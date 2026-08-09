@@ -44,19 +44,55 @@ function App() {
   const [rankings, setRankings] = useState<LeaderboardEntry[]>([])
   const [callsign, setCallsign] = useState('EARTHKEEPER')
   const [submitting, setSubmitting] = useState(false)
+  const [showAllPolicies, setShowAllPolicies] = useState(false)
+  const [pendingReportTurn, setPendingReportTurn] = useState<number>()
+  const [lastDecision, setLastDecision] = useState<{ policies: string[]; event: string }>()
 
   useEffect(() => { void initialize() }, [initialize])
   useEffect(() => {
     if (view === 'ranking') void loadLeaderboard().then(setRankings)
   }, [view])
+  useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }) }, [view])
 
   const selectedCountryIndex = Math.max(0, COUNTRIES.findIndex((country) => country.id === game.selectedCountryId))
   const country = COUNTRIES[selectedCountryIndex]
   const projection = projectCountry(country, game.global)
   const worldEvent = getEventForTurn(game.global.turn)
   const ending = getEnding(game.global)
+  const rankingStatusTitle = game.global.gameOver ? ending.title : `운영 중 · ${game.global.year}`
+  const rankingStatusDescription = game.global.gameOver
+    ? ending.description
+    : '현재 지표로 계산한 예상 등급입니다. 최종 등급과 공유 랭킹 기록은 시뮬레이션이 끝날 때 확정됩니다.'
   const selectedCost = getPolicyCost(game.selectedPolicies)
   const progress = Math.min(100, Math.max(0, (game.global.year - 2026) / 100 * 100))
+  const recommendedPolicyIds = useMemo(() => {
+    const recommendations: string[] = []
+    const add = (id: string) => { if (!recommendations.includes(id)) recommendations.push(id) }
+    if (game.global.emissions > 28) { add('solar-cities'); add('planetary-grid') }
+    if (game.global.resilience < 58) add('sponge-cities')
+    if (worldEvent.id === 'migration') add('migration-compact')
+    if (game.global.nature < 64) add('rewild')
+    if (game.global.trust < 52) add('climate-dividend')
+    ;['rewild', 'living-farms', 'climate-dividend', 'zero-transit'].forEach(add)
+    return recommendations.slice(0, 4)
+  }, [game.global.emissions, game.global.nature, game.global.resilience, game.global.trust, worldEvent.id])
+  const visiblePolicies = useMemo(() => {
+    if (showAllPolicies) return POLICIES
+    return POLICIES.filter((policy) => recommendedPolicyIds.includes(policy.id) || game.selectedPolicies.includes(policy.id))
+  }, [game.selectedPolicies, recommendedPolicyIds, showAllPolicies])
+  const latestHistory = game.global.history.at(-1)
+  const previousHistory = game.global.history.at(-2)
+  const emissionsDelta = latestHistory && previousHistory ? latestHistory.emissions - previousHistory.emissions : 0
+  const temperatureDelta = latestHistory && previousHistory ? latestHistory.temperature - previousHistory.temperature : 0
+  const policyReady = game.selectedPolicies.length > 0
+  const eventReady = Boolean(game.eventChoiceId)
+  const nextActionText = !policyReady ? '먼저 정책을 1개 이상 고르세요' : !eventReady ? '사건 대응을 선택하세요' : `${game.global.year + 5}년 결과 보기`
+  const reportOpen = pendingReportTurn !== undefined && !game.busy && game.global.turn > pendingReportTurn
+  const climateDelayText = emissionsDelta < 0 && temperatureDelta > 0
+    ? '배출은 줄었지만 이미 대기에 쌓인 온실가스와 해양의 열 때문에 기온은 당분간 더 오릅니다.'
+    : emissionsDelta < 0
+      ? '감축이 기온 상승 압력을 낮추기 시작했습니다. 이 흐름을 여러 턴 유지해야 합니다.'
+      : '배출 증가가 다음 턴의 추가 온난화와 재난 위험으로 이어집니다.'
 
   const countryStats = useMemo(() => {
     const empty = { population: 0, young: 0, working: 0, senior: 0, pressure: 0, stressed: 0, collapsed: 0, growing: 0 }
@@ -112,6 +148,12 @@ function App() {
   }
 
   function advanceTurn() {
+    const eventChoice = worldEvent.choices.find((choice) => choice.id === game.eventChoiceId)
+    setLastDecision({
+      policies: game.selectedPolicies.map((id) => POLICIES.find((policy) => policy.id === id)?.shortName ?? id),
+      event: eventChoice?.label ?? '대응 미선택',
+    })
+    setPendingReportTurn(game.global.turn)
     playConfirmation()
     game.advance()
   }
@@ -146,7 +188,7 @@ function App() {
           {game.error && <p className="inline-error">{game.error}</p>}
           <p className="intro__note">브라우저에서 실행되는 게임 모델 · 실제 국가 예측 도구가 아닙니다</p>
         </div>
-        <div className="intro__signal"><i /> LIVE SIMULATION <b>5K</b></div>
+        <div className="intro__signal"><i /> LOCAL EARTH MODEL · <b>5K CELLS</b></div>
       </main>
     )
   }
@@ -183,12 +225,12 @@ function App() {
           <div className="ranking-board panel">
             <div className="panel__heading"><div><span>GLOBAL STEWARDS</span><h3>행성 운영자 랭킹</h3></div><small>{rankings.length} RUNS</small></div>
             <div className="ranking-table" role="table" aria-label="행성 운영자 랭킹">
-              <div className="ranking-row ranking-row--head" role="row"><span>#</span><span>운영자 / 전략</span><span>생존</span><span>기온</span><span>점수</span></div>
+              <div className="ranking-row ranking-row--head" role="row"><span className="rank-col rank-col--position">#</span><span className="rank-col rank-col--player">운영자 / 전략</span><span className="rank-col rank-col--year">생존</span><span className="rank-col rank-col--temperature">기온</span><span className="rank-col rank-col--score">점수</span></div>
               {rankings.map((entry, index) => (
                 <div className="ranking-row" role="row" key={entry.id}>
-                  <strong>{String(index + 1).padStart(2, '0')}</strong>
-                  <div><b>{entry.callsign}</b><small>{entry.strategy.join(' · ') || '기록 없음'} {entry.verified && '✓'}</small></div>
-                  <span>{entry.endYear}</span><span>+{entry.temperature.toFixed(2)}°</span><em>{entry.score}</em>
+                  <strong className="rank-col rank-col--position">{String(index + 1).padStart(2, '0')}</strong>
+                  <div className="rank-col rank-col--player"><b>{entry.callsign}</b><small>{entry.strategy.join(' · ') || '기록 없음'} {entry.verified && '✓'}</small></div>
+                  <span className="rank-col rank-col--year">{entry.endYear}</span><span className="rank-col rank-col--temperature">+{entry.temperature.toFixed(2)}°</span><em className="rank-col rank-col--score">{entry.score}</em>
                 </div>
               ))}
             </div>
@@ -203,37 +245,13 @@ function App() {
           <aside className="ranking-stats panel">
             <div className="panel__heading"><div><span>CURRENT EARTH</span><h3>현재 운영 통계</h3></div></div>
             <div className="big-grade">{ending.grade}</div>
-            <h4>{ending.title}</h4><p>{ending.description}</p>
-            <dl><div><dt>생존 연도</dt><dd>{game.global.year}</dd></div><div><dt>회복력</dt><dd>{Math.round(game.global.resilience)}</dd></div><div><dt>청정전력</dt><dd>{Math.round(game.global.cleanEnergy)}%</dd></div><div><dt>생태계</dt><dd>{Math.round(game.global.nature)}</dd></div></dl>
+            <h4>{rankingStatusTitle}</h4><p>{rankingStatusDescription}</p>
+            <dl><div><dt>{game.global.gameOver ? '생존 연도' : '현재 연도'}</dt><dd>{game.global.year}</dd></div><div><dt>회복력</dt><dd>{Math.round(game.global.resilience)}</dd></div><div><dt>청정전력</dt><dd>{Math.round(game.global.cleanEnergy)}%</dd></div><div><dt>생태계</dt><dd>{Math.round(game.global.nature)}</dd></div></dl>
             <button className="secondary-button" onClick={() => setView('planet')}>행성으로 돌아가기</button>
           </aside>
         </section>
       ) : (
         <section className="dashboard">
-          <aside className="policy-panel panel">
-            <div className="panel__heading"><div><span>POLICY DECK</span><h3>이번 5년의 개입</h3></div><small>{game.selectedPolicies.length}/2 선택 · ◈ {selectedCost}</small></div>
-            <div className="policy-list">
-              {POLICIES.map((policy) => {
-                const selected = game.selectedPolicies.includes(policy.id)
-                const level = game.global.policyLevels[policy.id] ?? 0
-                const maxed = level >= policy.maxLevel
-                return (
-                  <button
-                    key={policy.id}
-                    className={`policy-card ${selected ? 'is-selected' : ''}`}
-                    style={{ '--policy-accent': policy.accent } as CSSProperties}
-                    onClick={() => game.togglePolicy(policy.id)}
-                    disabled={maxed || (!selected && game.selectedPolicies.length >= 2)}
-                  >
-                    <span className="policy-card__icon"><GameIcon name={policy.icon} /></span>
-                    <span className="policy-card__copy"><strong>{policy.shortName}</strong><small>{policy.description}</small><i>{Object.entries(policy.effects).slice(0, 3).map(([key, value]) => `${effectLabels[key]} ${signed(value)}`).join(' · ')}</i></span>
-                    <span className="policy-card__meta"><b>◈ {policy.cost}</b><small>{Array.from({ length: policy.maxLevel }, (_, index) => index < level ? '●' : '○').join('')}</small></span>
-                  </button>
-                )
-              })}
-            </div>
-          </aside>
-
           <section className="planet-stage">
             {game.world ? <Suspense fallback={<div className="planet-loading">Babylon 엔진을 불러오는 중…</div>}><WorldScene temperature={game.global.temperature} cleanEnergy={game.global.cleanEnergy} country={country} world={game.world} migration={game.migration} paused={game.busy} onEngineChange={game.setEngineLabel} /></Suspense> : <div className="planet-loading">행성 셀을 배치하는 중…</div>}
             <div className="engine-chip"><i /> {game.engineLabel}</div>
@@ -247,6 +265,56 @@ function App() {
             <div className="timeline"><span>2026</span><div><i style={{ width: `${progress}%` }} /><b style={{ left: `${progress}%` }} /></div><span>2126</span></div>
           </section>
 
+          <aside className="policy-panel panel">
+            <div className="panel__heading"><div><span>POLICY DECK</span><h3>이번 5년의 개입</h3></div><small>기금 ◈ {Math.round(game.global.funds)} · 선택 ◈ {selectedCost} · {game.selectedPolicies.length}/2</small></div>
+            {game.global.turn === 0 && (
+              <ol className="first-turn-guide" aria-label="첫 턴 3단계 안내">
+                <li className={policyReady ? 'is-complete' : 'is-current'} aria-current={!policyReady ? 'step' : undefined}><GameIcon name={policyReady ? 'check' : 'arrow'} size={16} /><span><strong>1. 정책 선택</strong><small>추천 카드에서 1~2개를 고르세요.</small></span></li>
+                <li className={eventReady ? 'is-complete' : policyReady ? 'is-current' : ''} aria-current={policyReady && !eventReady ? 'step' : undefined}><GameIcon name={eventReady ? 'check' : 'arrow'} size={16} /><span><strong>2. 사건 대응</strong><small>지구 아래에서 하나의 대응을 정하세요.</small></span></li>
+                <li className={policyReady && eventReady ? 'is-current' : ''} aria-current={policyReady && eventReady ? 'step' : undefined}><GameIcon name="arrow" size={16} /><span><strong>3. 5년 진행</strong><small>정책의 결과와 도시 이동을 확인하세요.</small></span></li>
+              </ol>
+            )}
+            <div className="policy-list">
+              {!showAllPolicies && <p className="policy-list__label">현재 지표에 맞춘 추천 정책 {recommendedPolicyIds.length}개</p>}
+              {visiblePolicies.map((policy) => {
+                const selected = game.selectedPolicies.includes(policy.id)
+                const recommended = recommendedPolicyIds.includes(policy.id)
+                const level = game.global.policyLevels[policy.id] ?? 0
+                const maxed = level >= policy.maxLevel
+                return (
+                  <button
+                    key={policy.id}
+                    className={`policy-card ${selected ? 'is-selected' : ''} ${recommended ? 'is-recommended' : ''}`}
+                    style={{ '--policy-accent': policy.accent } as CSSProperties}
+                    onClick={() => game.togglePolicy(policy.id)}
+                    disabled={maxed || (!selected && game.selectedPolicies.length >= 2)}
+                    aria-pressed={selected}
+                  >
+                    <span className="policy-card__icon"><GameIcon name={selected ? 'check' : policy.icon} /></span>
+                    <span className="policy-card__copy"><strong>{policy.shortName}{recommended && <em> 추천</em>}</strong><small>{policy.description}</small><i>{Object.entries(policy.effects).slice(0, 3).map(([key, value]) => `${effectLabels[key]} ${signed(value)}`).join(' · ')}</i></span>
+                    <span className="policy-card__meta"><b>◈ {policy.cost}</b><small>{maxed ? '완료' : Array.from({ length: policy.maxLevel }, (_, index) => index < level ? '●' : '○').join('')}</small></span>
+                  </button>
+                )
+              })}
+              <button className="secondary-button policy-view-toggle" type="button" onClick={() => setShowAllPolicies((value) => !value)} aria-expanded={showAllPolicies}>
+                {showAllPolicies ? `추천 ${recommendedPolicyIds.length}개만 보기` : `전체 정책 ${POLICIES.length}개 보기`}
+              </button>
+            </div>
+          </aside>
+
+          <section className="turn-console panel">
+            <div className="event-copy"><span>{worldEvent.eyebrow}</span><h3>{worldEvent.title}</h3><p>{worldEvent.description}</p></div>
+            <div className="event-choices">
+              {worldEvent.choices.map((choice) => {
+                const selected = game.eventChoiceId === choice.id
+                return <button className={selected ? 'is-selected' : ''} aria-pressed={selected} onClick={() => game.chooseEvent(choice.id)} key={choice.id}><GameIcon name={selected ? 'check' : 'arrow'} size={17} /><span><strong>{choice.label}</strong><small>{choice.consequence}</small></span></button>
+              })}
+            </div>
+            <button className="advance-button" onClick={advanceTurn} disabled={game.busy || game.global.gameOver || !eventReady || !policyReady}>
+              <span>{game.busy ? '세계 계산 중' : game.global.gameOver ? '시뮬레이션 종료' : '5년 진행'}</span><small>{game.busy ? '5,000개 셀 계산 중' : nextActionText}</small><GameIcon name="arrow" />
+            </button>
+          </section>
+
           <aside className="intel-panel panel">
             <div className="panel__heading"><div><span>COUNTRY LENS</span><h3>국가 미래 관측소</h3></div><GameIcon name="search" /></div>
             <label className="country-search"><GameIcon name="search" size={17} /><input type="search" list="countries" value={countryQuery} onChange={(event) => selectCountryFromQuery(event.target.value)} placeholder="국가 검색" /><datalist id="countries">{COUNTRIES.map((item) => <option key={item.id} value={item.nameKo}>{item.nameEn}</option>)}</datalist></label>
@@ -255,28 +323,33 @@ function App() {
             <div className="status-callout"><small>{projection.status}</small><p>{projection.narrative}</p></div>
             <div className="country-indicators"><div><span>극한 폭염일</span><strong>{projection.heatDays}<small>일/년</small></strong></div><div><span>해수면</span><strong>+{projection.seaLevelCm}<small>cm</small></strong></div><div><span>물 안보</span><strong>{projection.waterSecurity}<small>/100</small></strong></div></div>
             <div className="cohort-panel">
-              <div className="cohort-heading"><span>POPULATION COHORTS · 2026 SCENARIO</span><strong>{populationLabel(countryStats.population)}</strong></div>
-              {[['18–30', countryStats.young, '#70f6d2'], ['30–50', countryStats.working, '#65bfff'], ['50+', countryStats.senior, '#d7b7ff']].map(([label, value, color]) => (
-                <div className="cohort-row" key={String(label)}><span>{label}</span><div><i style={{ width: `${countryStats.population ? Number(value) / countryStats.population * 100 : 0}%`, background: String(color) }} /></div><strong>{populationLabel(Number(value))}</strong></div>
+              <div className="cohort-heading"><span>인구 연령대 · {game.global.year} 추정</span><strong>{populationLabel(countryStats.population)}</strong></div>
+              {[['18–29세', countryStats.young, '#70f6d2'], ['30–49세', countryStats.working, '#65bfff'], ['50세 이상', countryStats.senior, '#d7b7ff']].map(([label, value, color]) => (
+                <div className="cohort-row" key={String(label)}><span>{label}</span><div role="meter" aria-label={`${label} 인구 비율`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={countryStats.population ? Math.round(Number(value) / countryStats.population * 100) : 0}><i style={{ width: `${countryStats.population ? Number(value) / countryStats.population * 100 : 0}%`, background: String(color) }} /></div><strong>{populationLabel(Number(value))}</strong></div>
               ))}
-              <div className="pressure-row"><span>이주 압력</span><div><i style={{ width: `${countryStats.pressure * 100}%` }} /></div><strong>{countryStats.pressure.toFixed(2)}</strong></div>
+              <div className="pressure-row"><span>이주 압력</span><div role="meter" aria-label="이주 압력" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(countryStats.pressure * 100)}><i style={{ width: `${countryStats.pressure * 100}%` }} /></div><strong>{Math.round(countryStats.pressure * 100)}%</strong></div>
             </div>
             <p className="model-note"><GameIcon name="info" size={15} /> 교육용 게임 모델입니다. 실제 국가 전망이 아닙니다.</p>
           </aside>
-
-          <section className="turn-console panel">
-            <div className="event-copy"><span>{worldEvent.eyebrow}</span><h3>{worldEvent.title}</h3><p>{worldEvent.description}</p></div>
-            <div className="event-choices">
-              {worldEvent.choices.map((choice) => <button className={game.eventChoiceId === choice.id ? 'is-selected' : ''} onClick={() => game.chooseEvent(choice.id)} key={choice.id}><GameIcon name={game.eventChoiceId === choice.id ? 'check' : 'arrow'} size={17} /><span><strong>{choice.label}</strong><small>{choice.consequence}</small></span></button>)}
-            </div>
-            <button className="advance-button" onClick={advanceTurn} disabled={game.busy || game.global.gameOver || !game.eventChoiceId || game.selectedPolicies.length === 0}>
-              <span>{game.busy ? '세계 계산 중' : game.global.gameOver ? '시뮬레이션 종료' : '5년 진행'}</span><small>{game.eventChoiceId && game.selectedPolicies.length ? `${game.global.year + 5}년으로` : '정책과 대응을 선택하세요'}</small><GameIcon name="arrow" />
-            </button>
-          </section>
         </section>
       )}
 
-      {game.global.gameOver && view === 'planet' && (
+      {reportOpen && view === 'planet' && latestHistory && previousHistory && (
+        <div className="ending-banner turn-report-banner" role="status" aria-live="polite">
+          <div className="ending-grade">+5Y</div>
+          <div>
+            <small>정책 결과 · {lastDecision?.policies.join(' + ') || '정책 기록'} · {lastDecision?.event}</small>
+            <h2>{game.global.lastReport}</h2>
+            <p>{climateDelayText}</p>
+            <p>
+              배출 {previousHistory.emissions.toFixed(1)} → {latestHistory.emissions.toFixed(1)} Gt ({emissionsDelta >= 0 ? '+' : ''}{emissionsDelta.toFixed(1)}) · 기온 +{previousHistory.temperature.toFixed(2)} → +{latestHistory.temperature.toFixed(2)}°C ({temperatureDelta >= 0 ? '+' : ''}{temperatureDelta.toFixed(2)})
+              {' · '}이동 {populationLabel(game.migration.displacedMillions)} · 성장 도시 {game.migration.growingCities} · 붕괴 도시 {game.migration.collapsedCities}
+            </p>
+          </div>
+          <button className="primary-button" onClick={() => setPendingReportTurn(undefined)}>다음 5년 설계 <GameIcon name="arrow" /></button>
+        </div>
+      )}
+      {game.global.gameOver && view === 'planet' && !reportOpen && (
         <div className="ending-banner"><div className="ending-grade">{ending.grade}</div><div><small>FINAL PLANET REPORT</small><h2>{ending.title}</h2><p>{ending.description}</p></div><button className="primary-button" onClick={() => setView('ranking')}>랭킹과 통계 보기 <GameIcon name="arrow" /></button></div>
       )}
       {game.busy && <div className="calculating" role="status"><i /><span>5,000개 셀에서 다음 5년을 계산하고 있습니다</span></div>}

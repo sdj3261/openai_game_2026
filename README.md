@@ -6,7 +6,7 @@
 
 GAIA//2126은 뜨거워진 2026년부터 2126년까지 지구 문명을 운영하는 웹 전략 게임입니다. 정책 하나가 기후·식량·물·경제를 흔들고, 청년·생산연령·고령 인구 코호트의 이동과 도시의 성장 또는 붕괴로 이어집니다. 숫자로 계산한 결과는 살아 움직이는 3D 전략 지구에 이주 경로, 도시 불빛과 재난으로 나타납니다.
 
-설치, 계정, 백엔드 없이 최신 데스크톱 브라우저에서 바로 한 판을 플레이할 수 있도록 설계했습니다.
+설치와 계정 없이 최신 데스크톱 브라우저에서 바로 한 판을 플레이할 수 있도록 설계했습니다. 게임 완주에는 네트워크 백엔드가 필요하지 않으며, 기본 GitHub Pages 빌드는 로컬 순위표를 쓰는 `LOCAL DEMO`입니다.
 
 ## 플레이 방법
 
@@ -55,6 +55,8 @@ GAIA//2126은 뜨거워진 2026년부터 2126년까지 지구 문명을 운영�
 
 현재 공개 빌드의 순위표는 **`LOCAL DEMO`**입니다. 내장 샘플과 이 브라우저의 과거 완료 기록을 `localStorage`에서 비교하며, 라이브 공유 백엔드나 실시간 Hive 사용자를 표시하지 않습니다.
 
+지구의 실제 지리 기준은 생성형 이미지가 아니라 [NASA Blue Marble](./docs/ASSET_PROVENANCE.md) 2048×1024 래스터입니다. 같은 파일을 시작 화면의 지구와 Babylon.js 구체에 사용하고, 기후 셀·도시·이주만 게임 데이터 오버레이로 올립니다. 생성형 이미지는 실제 지리로 오인되지 않는 절제된 궤도 배경에만 사용합니다.
+
 ## 기술 구조
 
 ```text
@@ -72,13 +74,14 @@ React UI ─────── Zustand ─────── Babylon.js
 | 영역 | 기술 |
 |---|---|
 | App | React 19, TypeScript, Vite |
-| UI style | Tailwind CSS |
+| UI style | 프로젝트 CSS 디자인 시스템 |
 | State | Zustand |
 | 3D | Babylon.js, WebGPU → WebGL2 fallback |
 | Simulation | Dedicated Web Worker |
 | World data | TypedArray / transferable ArrayBuffer |
 | Save | IndexedDB |
-| Result board | localStorage fallback, optional REST `GET/POST /leaderboard` |
+| Result board | localStorage 기본값, 선택형 Cloudflare Worker REST API |
+| Optional leaderboard backend | Cloudflare Worker + D1, 서버 결정론 재실행 |
 | Test | Vitest |
 
 시뮬레이션은 UI 스레드와 분리합니다. Worker가 정책 → 기후 → 자원 → 이주 → 도시 상태를 계산하고, React와 Babylon.js는 같은 스냅샷을 대시보드와 3D 장면으로 표현합니다. 자세한 설계와 20,000셀·100,000셀 확장 계획은 [기술 아키텍처](./docs/TECHNICAL_ARCHITECTURE.md)에 있습니다.
@@ -126,7 +129,18 @@ npm run preview
 VITE_LEADERBOARD_API_URL=
 ```
 
-향후 공유 서비스가 실제 배포된 뒤에만 base URL을 설정합니다. 클라이언트는 `${VITE_LEADERBOARD_API_URL}/leaderboard`에 `GET`과 `POST`를 보내며, 실패하면 완주 기록을 잃지 않고 로컬 보드로 돌아갑니다. 현재 저장소에는 라이브 공유 백엔드가 포함되거나 배포되어 있지 않습니다. 서버 재실행 검증 계약은 [기술 아키텍처](./docs/TECHNICAL_ARCHITECTURE.md#10-최종-대시보드와-리더보드-계약)를 참고하세요.
+저장소의 [`services/leaderboard-worker`](./services/leaderboard-worker)에는 Cloudflare Worker + D1 공유 순위 API와 테스트가 구현되어 있습니다. Worker는 v1의 전체 턴 선택 로그를 같은 규칙으로 재실행하고 최종 연도·기온·자연·신뢰·회복력·점수·등급·전략 태그가 모두 맞을 때만 `verified: true`로 저장합니다. 다만 **외부 Worker와 D1은 아직 배포하지 않았습니다.** 실제 URL이 생긴 뒤에만 base URL을 설정합니다.
+
+클라이언트는 `${VITE_LEADERBOARD_API_URL}/leaderboard`에 `GET`과 `POST`를 보내며, 실패하거나 URL이 비어 있으면 완주 기록을 잃지 않고 로컬 보드로 돌아갑니다. API·보안·배포 준비 계약은 [기술 아키텍처](./docs/TECHNICAL_ARCHITECTURE.md#10-최종-대시보드와-리더보드-계약)와 [Worker README](./services/leaderboard-worker/README.md)를 참고하세요.
+
+백엔드 구현만 로컬 검증하려면 다음을 실행합니다. 이 명령은 외부 배포를 만들지 않습니다.
+
+```bash
+cd services/leaderboard-worker
+npm ci
+npm run check
+npm run build
+```
 
 ## GitHub Pages 배포
 
@@ -190,8 +204,9 @@ WMO는 2025년이 관측 사상 가장 더운 세 해 중 하나였고, 2023–2
 2. **Release — 20,000셀:** 더 많은 국가·도시, 재난 공간 전파, 정책 트리, 시나리오
 3. **Scale — 100,000셀:** 기온·습도·오염·식생의 WebGPU Compute, CPU 폴백
 4. **필요할 때 Rust/WASM:** 프로파일링으로 확인된 경로 탐색과 대형 계산만 이식
-5. **Hive 확장:** Go의 선택 로그 재실행 검증 + PostgreSQL verified run, 주간 동일 시드 챌린지, 공동 목표, 결과 공유
-6. **규모가 요구할 때:** Redis 상위 순위/시즌 집계 캐시와 rate limit 공유
+5. **공유 순위 준비 완료:** 구현·테스트된 Cloudflare Worker가 선택 로그를 재실행하고 D1에 verified run 저장; 외부 배포는 아직 하지 않음
+6. **Hive 확장:** 인증된 주간 동일 시드 챌린지, 공동 목표, 결과 공유와 단회 season nonce
+7. **규모가 요구할 때:** D1 운영 한계를 측정한 뒤에만 Go/PostgreSQL 또는 Redis 캐시를 검토
 
 ---
 
