@@ -39,7 +39,28 @@ function readLocal() {
 function isEntry(value: unknown): value is LeaderboardEntry {
   if (!value || typeof value !== 'object') return false
   const entry = value as Partial<LeaderboardEntry>
-  return typeof entry.id === 'string' && typeof entry.callsign === 'string' && Number.isFinite(entry.score)
+  return typeof entry.id === 'string'
+    && entry.id.length <= 128
+    && typeof entry.callsign === 'string'
+    && entry.callsign.length <= 18
+    && Number.isFinite(entry.score)
+    && Number(entry.score) >= 0
+    && Number(entry.score) <= 1200
+    && Number.isInteger(entry.endYear)
+    && Number(entry.endYear) >= 2026
+    && Number(entry.endYear) <= 2126
+    && typeof entry.grade === 'string'
+    && ['S', 'A', 'B', 'C', 'D'].includes(entry.grade)
+    && Number.isFinite(entry.temperature)
+    && Number(entry.temperature) >= 1
+    && Number(entry.temperature) <= 5
+    && [entry.nature, entry.trust, entry.resilience].every((metric) => Number.isFinite(metric) && Number(metric) >= 0 && Number(metric) <= 100)
+    && Array.isArray(entry.strategy)
+    && entry.strategy.length <= 3
+    && entry.strategy.every((tag) => typeof tag === 'string' && tag.length <= 40)
+    && typeof entry.submittedAt === 'string'
+    && Number.isFinite(Date.parse(entry.submittedAt))
+    && typeof entry.verified === 'boolean'
 }
 
 function rank(entries: LeaderboardEntry[]) {

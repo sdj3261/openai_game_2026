@@ -58,7 +58,7 @@ export function CountryDiorama({ biome, projection, year }: Props) {
     const land = Color3.Lerp(Color3.FromHexString(palette.land), Color3.FromHexString('#a95936'), stress * 0.72)
     const high = Color3.Lerp(Color3.FromHexString(palette.high), Color3.FromHexString('#704032'), stress * 0.5)
     const flood = projection.seaLevelCm > 55 ? 1 : 0
-    const terrainTexture = new Texture(`${import.meta.env.BASE_URL}assets/earth-surface-tile.png`, scene, false, false, Texture.TRILINEAR_SAMPLINGMODE)
+    const terrainTexture = new Texture(`${import.meta.env.BASE_URL}assets/earth-surface-tile.webp`, scene, false, false, Texture.TRILINEAR_SAMPLINGMODE)
     terrainTexture.uScale = 0.88
     terrainTexture.vScale = 0.88
     terrainTexture.anisotropicFilteringLevel = 4

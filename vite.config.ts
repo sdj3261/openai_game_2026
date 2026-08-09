@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: '/openai_game_2026/',
   build: {
-    sourcemap: true,
+    sourcemap: false,
     target: 'es2022',
   },
 })

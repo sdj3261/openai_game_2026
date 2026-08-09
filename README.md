@@ -2,7 +2,7 @@
 
 **정책을 고르면, 사람들이 움직이고 도시의 운명이 바뀐다.**
 
-[브라우저에서 바로 플레이](https://sdj3261.github.io/openai_game_2026/) · [게임 디자인](./docs/GAME_DESIGN.md) · [기술 아키텍처](./docs/TECHNICAL_ARCHITECTURE.md) · [시스템 디자인 DOCX](./docs/GAIA_2126_SYSTEM_DESIGN.docx) · [Codex 협업 기록](./docs/CODEX_COLLABORATION.md) · [제출/시연 자료](./docs/SUBMISSION.md)
+[브라우저에서 바로 플레이](https://sdj3261.github.io/openai_game_2026/) · [게임 디자인](./docs/GAME_DESIGN.md) · [기술 아키텍처](./docs/TECHNICAL_ARCHITECTURE.md) · [시스템 디자인 DOCX](./docs/GAIA_2126_SYSTEM_DESIGN.docx) · [보안 검토](./docs/SECURITY_REVIEW.md) · [Codex 협업 기록](./docs/CODEX_COLLABORATION.md) · [제출/시연 자료](./docs/SUBMISSION.md)
 
 GAIA//2126은 뜨거워진 2026년부터 2126년까지 지구 문명을 운영하는 웹 전략 게임입니다. 정책 하나가 기후·식량·물·경제를 흔들고, 청년·생산연령·고령 인구 코호트의 이동과 도시의 성장 또는 붕괴로 이어집니다. 숫자로 계산한 결과는 살아 움직이는 3D 전략 지구에 이주 경로, 도시 불빛과 재난으로 나타납니다.
 
