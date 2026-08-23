@@ -140,6 +140,38 @@ test("calculateStealthScore normalizes malformed, negative, fractional, and nume
   assert.equal(calculateStealthScore({ radarHits: Symbol("invalid"), time: {} }).score, 10000);
 });
 
+test("calculateStealthScore adds treasure value and optional item bonus to the total", () => {
+  const result = calculateStealthScore({
+    radarHits: 1,
+    retries: 0,
+    echoes: 1,
+    targetEchoes: 1,
+    time: 5000,
+    treasureValue: 700,
+    itemBonus: 400,
+  });
+
+  assert.equal(result.breakdown.stealthScore, 8800);
+  assert.equal(result.breakdown.treasureValue, 700);
+  assert.equal(result.breakdown.itemBonus, 400);
+  assert.equal(result.breakdown.collectibleBonus, 1100);
+  assert.equal(result.score, 9900);
+  assert.equal(result.breakdown.gradeScore, 8800);
+  assert.equal(result.grade, "A");
+});
+
+test("collectible scores are normalized and total score is safely capped", () => {
+  const normalized = calculateStealthScore({ treasureValue: "420.9", itemBonus: -20, time: 5000 });
+  assert.equal(normalized.breakdown.treasureValue, 420);
+  assert.equal(normalized.breakdown.itemBonus, 0);
+  assert.equal(normalized.score, 10420);
+
+  const capped = calculateStealthScore({ treasureValue: 999999, itemBonus: 999999, time: 5000 });
+  assert.equal(capped.breakdown.treasureValue, 5000);
+  assert.equal(capped.breakdown.itemBonus, 5000);
+  assert.equal(capped.score, 20000);
+});
+
 test("completion records sort by time and then by echoes without mutating input", () => {
   const slower = { id: "slow", world: "01", time: 7800, echoes: 0 };
   const moreEchoes = { id: "more", world: "01", time: 6500, echoes: 2 };
@@ -171,6 +203,14 @@ test("scored completion records sort by score, radar hits, retries, echoes, and 
     "time",
     "slow-time",
   ]);
+});
+
+test("collectible totals above the legacy 10,000 ceiling rank by their full score", () => {
+  const records = [
+    { id: "plain", world: "01", score: 9900, radarHits: 0, retries: 0, echoes: 0, time: 5000 },
+    { id: "treasure", world: "01", score: 10700, radarHits: 1, retries: 1, echoes: 1, time: 7000 },
+  ];
+  assert.deepEqual(sortCompletionRecords(records).map((record) => record.id), ["treasure", "plain"]);
 });
 
 test("scored records precede legacy records while legacy ordering remains compatible", () => {

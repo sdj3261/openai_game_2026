@@ -1,4 +1,4 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.7.0";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.8.0";
 import {
   PROFILE_COLORS,
   PROFILE_FACES,
@@ -7,8 +7,8 @@ import {
   getWorldLeaderboard,
   getWorldTopRecords,
   normalizeProfile,
-} from "./profile-utils.js?v=0.7.0";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.7.0";
+} from "./profile-utils.js?v=0.8.0";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.8.0";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -82,6 +82,23 @@ const THEMES = {
   clocktower: { id: "clocktower", location: "자정 시계탑", floor: "#d8c9c2", glow: "#efe1d9", grid: "#a98b8b", wall: "#78394e", wallDark: "#452335", accent: "#bc3159" },
 };
 
+const TREASURE_TYPES = Object.freeze({
+  clockwork: Object.freeze({ nameKey: "treasureClockwork", value: 300, palette: Object.freeze({ main: "#30d5f2", dark: "#177dcc", light: "#d9fbff", accent: "#7d6cf2" }) }),
+  amber: Object.freeze({ nameKey: "treasureAmber", value: 400, palette: Object.freeze({ main: "#f4a340", dark: "#b45d26", light: "#fff0b8", accent: "#dd6b35" }) }),
+  candyRuby: Object.freeze({ nameKey: "treasureCandyRuby", value: 500, palette: Object.freeze({ main: "#ff537f", dark: "#bd275d", light: "#ffd4e2", accent: "#b84be3" }) }),
+  cloudSapphire: Object.freeze({ nameKey: "treasureCloudSapphire", value: 600, palette: Object.freeze({ main: "#4fa5ff", dark: "#315fc7", light: "#d9f2ff", accent: "#68d7e8" }) }),
+  moonPearl: Object.freeze({ nameKey: "treasureMoonPearl", value: 700, palette: Object.freeze({ main: "#d9d7ff", dark: "#7874c7", light: "#ffffff", accent: "#8bc9ff" }) }),
+  mirrorOpal: Object.freeze({ nameKey: "treasureMirrorOpal", value: 800, palette: Object.freeze({ main: "#65e1cb", dark: "#347f9c", light: "#e4fff7", accent: "#b869ee" }) }),
+  crownEmerald: Object.freeze({ nameKey: "treasureCrownEmerald", value: 900, palette: Object.freeze({ main: "#39cf7a", dark: "#187b52", light: "#d7ffe4", accent: "#ffc857" }) }),
+  midnightStar: Object.freeze({ nameKey: "treasureMidnightStar", value: 1200, palette: Object.freeze({ main: "#8f63f2", dark: "#452b9e", light: "#ede2ff", accent: "#ffd166" }) }),
+});
+
+const ITEM_TYPES = Object.freeze({
+  time: Object.freeze({ nameKey: "itemTimeGear", main: "#4f8cff", dark: "#2656a8", light: "#d9efff", duration: 1500, score: 150 }),
+  shield: Object.freeze({ nameKey: "itemRadarShield", main: "#39c99a", dark: "#157963", light: "#d9fff1", charges: 1, score: 250 }),
+  bonus: Object.freeze({ nameKey: "itemBonusShard", main: "#ffc857", dark: "#b96b22", light: "#fff2b8", score: 400 }),
+});
+
 const levels = [
   {
     code: "01",
@@ -91,6 +108,8 @@ const levels = [
     music: { label: "QUIET STEP", groove: "sparse", bpm: 90, root: 220, type: "triangle", steps: [0, null, 3, null, 7, null, 10, null, 7, null, 3, null] },
     start: { x: 100, y: 585 },
     gem: { x: 1025, y: 110 },
+    treasure: TREASURE_TYPES.clockwork,
+    items: [{ id: "01-bonus", type: "bonus", x: 180, y: 170, score: 300 }],
     exit: { x: 1080, y: 585 },
     plates: [],
     doors: [],
@@ -113,6 +132,8 @@ const levels = [
     music: { label: "FACTORY BEAT", groove: "industrial", bpm: 105, root: 110, type: "square", steps: [0, null, 0, 7, null, 3, 0, null, 10, 7, null, 3, 0, null] },
     start: { x: 100, y: 580 },
     gem: { x: 1035, y: 120 },
+    treasure: TREASURE_TYPES.amber,
+    items: [{ id: "02-shield", type: "shield", x: 250, y: 160 }],
     exit: { x: 1060, y: 585 },
     plates: [],
     doors: [],
@@ -130,6 +151,8 @@ const levels = [
     music: { label: "CASINO BOUNCE", groove: "bounce", bpm: 120, root: 196, type: "square", steps: [0, 3, 7, 10, 7, 3, 0, null, 0, 3, 7, 12, 10, 7, 3, null] },
     start: { x: 100, y: 585 },
     gem: { x: 1015, y: 110 },
+    treasure: TREASURE_TYPES.candyRuby,
+    items: [{ id: "03-time", type: "time", x: 620, y: 570 }],
     exit: { x: 1080, y: 585 },
     plates: [{ id: "A", x: 235, y: 120, r: 30 }],
     doors: [{ x: 500, y: 260, w: 30, h: 200, plateId: "A" }],
@@ -151,6 +174,8 @@ const levels = [
     music: { label: "LAB ALARM", groove: "alarm", bpm: 135, root: 131, type: "sawtooth", steps: [0, null, 7, 3, 10, 7, 12, null, 7, 0, null, 3, 7, 10, 15, 12, 7, null] },
     start: { x: 100, y: 585 },
     gem: { x: 1030, y: 115 },
+    treasure: TREASURE_TYPES.cloudSapphire,
+    items: [{ id: "04-bonus", type: "bonus", x: 170, y: 555, score: 400 }],
     exit: { x: 1080, y: 500 },
     plates: [{ id: "A", x: 250, y: 115, r: 30 }, { id: "B", x: 590, y: 115, r: 30 }],
     doors: [{ x: 400, y: 260, w: 30, h: 180, plateId: "A" }, { x: 760, y: 260, w: 30, h: 180, plateId: "B" }],
@@ -172,8 +197,9 @@ const levels = [
     music: { label: "NIGHT TRAIN", groove: "bounce", bpm: 150, root: 147, type: "triangle", steps: [0, null, 3, 7, 10, 7, 3, null, 0, 3, 7, 12, 10, 7, 3, 0, -2, 0, 3, null] },
     start: { x: 100, y: 585 },
     gem: { x: 1030, y: 110 },
+    treasure: TREASURE_TYPES.moonPearl,
+    items: [{ id: "05-time", type: "time", x: 650, y: 155 }],
     exit: { x: 1080, y: 585 },
-    timeBonus: { x: 650, y: 155, bonus: 1500 },
     plates: [{ id: "A", x: 255, y: 570, r: 30 }],
     doors: [{ x: 520, y: 260, w: 30, h: 180, plateId: "A" }],
     walls: [
@@ -194,6 +220,8 @@ const levels = [
     music: { label: "MIRROR STEP", groove: "alarm", bpm: 165, root: 165, type: "square", steps: [0, 3, 7, 10, 7, 3, 0, null, 2, 5, 9, 12, 9, 5, 2, null, 0, 3, 7, 12, 10, null] },
     start: { x: 100, y: 585 },
     gem: { x: 1030, y: 110 },
+    treasure: TREASURE_TYPES.mirrorOpal,
+    items: [{ id: "06-shield", type: "shield", x: 640, y: 160 }],
     exit: { x: 1080, y: 585 },
     plates: [{ id: "A", x: 230, y: 115, r: 30 }, { id: "B", x: 600, y: 570, r: 30 }],
     doors: [{ x: 420, y: 250, w: 30, h: 200, plateId: "A" }, { x: 780, y: 250, w: 30, h: 200, plateId: "B" }],
@@ -217,6 +245,8 @@ const levels = [
     music: { label: "ROYAL RUSH", groove: "alarm", bpm: 180, root: 123, type: "square", steps: [0, 0, 3, 7, 10, 7, 3, 0, 5, 5, 8, 12, 10, 8, 5, 3, 0, 3, 7, 12, 15, 12, 7, null] },
     start: { x: 100, y: 585 },
     gem: { x: 1030, y: 110 },
+    treasure: TREASURE_TYPES.crownEmerald,
+    items: [{ id: "07-bonus", type: "bonus", x: 650, y: 105, score: 600 }],
     exit: { x: 1080, y: 585 },
     plates: [{ id: "A", x: 220, y: 115, r: 30 }, { id: "B", x: 560, y: 570, r: 30 }],
     doors: [{ x: 360, y: 240, w: 30, h: 220, plateId: "A" }, { x: 730, y: 240, w: 30, h: 220, plateId: "B" }],
@@ -241,6 +271,12 @@ const levels = [
     music: { label: "CLOCK BOSS", groove: "boss", bpm: 195, root: 98, type: "sawtooth", steps: [0, 0, 3, 7, 0, 10, 7, 3, 0, -2, 0, 3, 7, 12, 10, 7, 3, 0, 5, 8, 12, 15, 12, 8, 3, null] },
     start: { x: 100, y: 585 },
     gem: { x: 1030, y: 110 },
+    treasure: TREASURE_TYPES.midnightStar,
+    items: [
+      { id: "08-time", type: "time", x: 445, y: 550 },
+      { id: "08-shield", type: "shield", x: 830, y: 570 },
+      { id: "08-bonus", type: "bonus", x: 610, y: 100, score: 800 },
+    ],
     exit: { x: 1080, y: 500 },
     plates: [{ id: "A", x: 225, y: 115, r: 30 }, { id: "B", x: 550, y: 570, r: 30 }],
     doors: [{ x: 350, y: 440, w: 30, h: 140, plateId: "A" }, { x: 700, y: 120, w: 30, h: 150, plateId: "B" }],
@@ -368,6 +404,12 @@ let stageStartedAt = 0;
 let completedLoopElapsed = 0;
 let loopLimit = LOOP_DURATION;
 let timeBonusCollected = false;
+let treasureCollected = false;
+let treasureValueCollected = 0;
+let collectedItemIds = new Set();
+let itemBonusScore = 0;
+let radarShieldCharges = 0;
+let radarShieldBlocking = false;
 let runRadarHits = 0;
 let runRetries = 0;
 let wasSeenByAnyGuard = false;
@@ -388,6 +430,14 @@ const stickInput = { x: 0, y: 0, magnitude: 0, pointerId: null };
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function lerp(a, b, t) { return a + (b - a) * t; }
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function itemType(item) { return ITEM_TYPES[item?.type] || null; }
+function stageLoopLimit() {
+  return LOOP_DURATION + (level.items || []).reduce((total, item) => (
+    collectedItemIds.has(item.id) && item.type === "time"
+      ? total + (Number(item.duration) || itemType(item)?.duration || 0)
+      : total
+  ), 0);
+}
 function normalizeAngle(angle) {
   while (angle > Math.PI) angle -= Math.PI * 2;
   while (angle < -Math.PI) angle += Math.PI * 2;
@@ -821,6 +871,12 @@ function startLevel(index = levelIndex) {
   loopNumber = 1;
   loopLimit = LOOP_DURATION;
   timeBonusCollected = false;
+  treasureCollected = false;
+  treasureValueCollected = 0;
+  collectedItemIds = new Set();
+  itemBonusScore = 0;
+  radarShieldCharges = 0;
+  radarShieldBlocking = false;
   runRadarHits = 0;
   runRetries = 0;
   wasSeenByAnyGuard = false;
@@ -841,13 +897,14 @@ function startLevel(index = levelIndex) {
 }
 
 function resetLoop(withEffect = true, preserveStick = false) {
+  loopLimit = stageLoopLimit();
   player = {
     id: "current",
     x: level.start.x,
     y: level.start.y,
     angle: -Math.PI / 2,
     radius: PLAYER_RADIUS,
-    hasGem: false,
+    hasGem: treasureCollected,
     exposure: 0,
     noiseCooldown: 0,
     exitHintShown: false,
@@ -861,6 +918,7 @@ function resetLoop(withEffect = true, preserveStick = false) {
   currentSecond = -1;
   currentMusicStep = -1;
   wasSeenByAnyGuard = false;
+  radarShieldBlocking = false;
   guards = createGuards();
   noisePulses = [];
   plateStates = new Map(level.plates.map((plate) => [plate.id, false]));
@@ -924,6 +982,12 @@ function restartWholeLevel() {
   loopNumber = 1;
   loopLimit = LOOP_DURATION;
   timeBonusCollected = false;
+  treasureCollected = false;
+  treasureValueCollected = 0;
+  collectedItemIds = new Set();
+  itemBonusScore = 0;
+  radarShieldCharges = 0;
+  radarShieldBlocking = false;
   runRadarHits = 0;
   runRetries = 0;
   wasSeenByAnyGuard = false;
@@ -1039,6 +1103,34 @@ function moveCircle(entity, dx, dy, solids = getSolidRects()) {
   }
 }
 
+function collectStageItem(item) {
+  const type = itemType(item);
+  if (!type || collectedItemIds.has(item.id)) return;
+  collectedItemIds.add(item.id);
+  const itemName = t(settings.language, type.nameKey);
+  let effectLabel = "";
+  if (item.type === "time") {
+    timeBonusCollected = true;
+    loopLimit = stageLoopLimit();
+    const duration = Number(item.duration) || type.duration;
+    effectLabel = t(settings.language, "timeBonusLabel", { value: (duration / 1000).toFixed(1) });
+  } else if (item.type === "shield") {
+    radarShieldCharges += Number(item.charges) || type.charges;
+    effectLabel = t(settings.language, "shieldReady");
+  }
+  const scoreValue = Number(item.score) || Number(type.score) || 0;
+  if (scoreValue > 0) {
+    itemBonusScore += scoreValue;
+    const pointsLabel = t(settings.language, "itemPoints", { value: scoreValue.toLocaleString(settings.language) });
+    effectLabel = effectLabel ? `${effectLabel} · ${pointsLabel}` : pointsLabel;
+  }
+  sound("timeBonus");
+  flash = reducedMotionQuery.matches ? 0 : 0.42;
+  burst(item.x, item.y, type.main, 18, 120);
+  showToast(`${t(settings.language, "itemGet", { item: itemName })} ${effectLabel}`, 1150);
+  showSoundCaption("itemSound", item);
+}
+
 function updatePlayer(dt) {
   let dx = 0;
   let dy = 0;
@@ -1088,22 +1180,19 @@ function updatePlayer(dt) {
   }
   player.noiseCooldown = Math.max(0, player.noiseCooldown - dt);
 
-  if (level.timeBonus && !timeBonusCollected && dist(player, level.timeBonus) < 30) {
-    timeBonusCollected = true;
-    loopLimit = LOOP_DURATION + level.timeBonus.bonus;
-    sound("timeBonus");
-    flash = reducedMotionQuery.matches ? 0 : 0.55;
-    burst(level.timeBonus.x, level.timeBonus.y, "#4f8cff", 22, 135);
-    showToast(t(settings.language, "timeBonus", { value: (level.timeBonus.bonus / 1000).toFixed(1) }), 1000);
-    showSoundCaption("timeBonusSound", level.timeBonus);
+  for (const item of level.items || []) {
+    if (!collectedItemIds.has(item.id) && dist(player, item) < 28) collectStageItem(item);
   }
 
-  if (!player.hasGem && dist(player, level.gem) < 31) {
+  if (!treasureCollected && dist(player, level.gem) < 29) {
+    treasureCollected = true;
+    treasureValueCollected = level.treasure?.value || 0;
     player.hasGem = true;
     sound("gem");
     flash = reducedMotionQuery.matches ? 0 : 0.7;
-    burst(level.gem.x, level.gem.y, "#ffd166", 26, 150);
-    showToast(`${t(settings.language, "gemGet")} → ${t(settings.language, "exit")}`, 1000);
+    burst(level.gem.x, level.gem.y, level.treasure?.palette?.accent || "#ffd166", 26, 150);
+    const treasureName = t(settings.language, level.treasure?.nameKey || "gem");
+    showToast(`${t(settings.language, "treasureGet", { name: treasureName, value: treasureValueCollected.toLocaleString(settings.language) })} → ${t(settings.language, "exit")}`, 1200);
     showSoundCaption("gemGet", level.gem);
   }
   if (player.hasGem && dist(player, level.exit) < 38) {
@@ -1373,7 +1462,16 @@ function updateGuards(dt) {
     }
   }
 
-  const seenNow = currentDetectionRates.length > 0;
+  const seenByRadar = currentDetectionRates.length > 0;
+  if (seenByRadar && !radarShieldBlocking && !wasSeenByAnyGuard && radarShieldCharges > 0) {
+    radarShieldCharges -= 1;
+    radarShieldBlocking = true;
+    flash = reducedMotionQuery.matches ? 0 : 0.35;
+    burst(player.x, player.y, ITEM_TYPES.shield.main, 16, 105);
+    showToast(t(settings.language, "shieldUsed"), 950);
+  }
+  if (!seenByRadar) radarShieldBlocking = false;
+  const seenNow = seenByRadar && !radarShieldBlocking;
   if (seenNow && !wasSeenByAnyGuard) runRadarHits += 1;
   if (seenNow) wasSeenByAnyGuard = true;
   if (seenNow) player.exposure += dt * Math.max(...currentDetectionRates);
@@ -1407,6 +1505,8 @@ function completeLevel() {
     echoes: echoes.length,
     targetEchoes: level.requiredEchoes,
     time: Math.round(completedLoopElapsed),
+    treasureValue: treasureValueCollected,
+    itemBonus: itemBonusScore,
   });
   const run = {
     id: `${Date.now()}-${level.code}`,
@@ -1415,6 +1515,9 @@ function completeLevel() {
     echoes: echoes.length,
     radarHits: runRadarHits,
     retries: runRetries,
+    treasureValue: treasureValueCollected,
+    itemBonus: itemBonusScore,
+    itemsCollected: collectedItemIds.size,
     score: scoreResult.score,
     grade: scoreResult.grade,
     name: profile.name,
@@ -1444,8 +1547,30 @@ function showCompleteOverlay() {
   const stageCopy = localizedStage(level);
   const nextLevel = levels[levelIndex + 1] || null;
   const nextCopy = nextLevel ? localizedStage(nextLevel) : null;
-  const fallbackScore = calculateStealthScore({ radarHits: runRadarHits, retries: runRetries, echoes: echoes.length, targetEchoes: level.requiredEchoes, time: completedLoopElapsed });
-  const result = lastClearResult || { run: { time: completedLoopElapsed, echoes: echoes.length, radarHits: runRadarHits, retries: runRetries, ...fallbackScore }, previousBest: null, newBest: false, rank: null };
+  const fallbackScore = calculateStealthScore({
+    radarHits: runRadarHits,
+    retries: runRetries,
+    echoes: echoes.length,
+    targetEchoes: level.requiredEchoes,
+    time: completedLoopElapsed,
+    treasureValue: treasureValueCollected,
+    itemBonus: itemBonusScore,
+  });
+  const result = lastClearResult || {
+    run: {
+      time: completedLoopElapsed,
+      echoes: echoes.length,
+      radarHits: runRadarHits,
+      retries: runRetries,
+      treasureValue: treasureValueCollected,
+      itemBonus: itemBonusScore,
+      itemsCollected: collectedItemIds.size,
+      ...fallbackScore,
+    },
+    previousBest: null,
+    newBest: false,
+    rank: null,
+  };
   const comparison = result.newBest
     ? `<p class="clear-record is-best"><b>${t(settings.language, "newBest")}</b>${result.previousBest ? `<span>${t(settings.language, "previousBest")} ${formatRecordScore(result.previousBest)} → ${formatRecordScore(result.run)}</span>` : ""}</p>`
     : `<p class="clear-record"><b>${t(settings.language, "deviceRank")} #${result.rank || "-"}</b><span>${t(settings.language, "best")} ${formatRecordScore(getWorldTopRecords(completionRecords, level.code, 1)[0] || result.run)}</span></p>`;
@@ -1460,6 +1585,8 @@ function showCompleteOverlay() {
         <div><span>${t(settings.language, "retries")}</span><b>${result.run.retries}</b></div>
         <div><span>${t(settings.language, "echoName")}</span><b>×${result.run.echoes}</b></div>
         <div><span>${t(settings.language, "timeLeft")}</span><b>${formatRecordTime(result.run.time)}</b></div>
+        <div><span>${t(settings.language, "treasureValue")}</span><b>+${Number(result.run.treasureValue || 0).toLocaleString(settings.language)}</b></div>
+        <div><span>${t(settings.language, "itemBonusScore")}</span><b>+${Number(result.run.itemBonus || 0).toLocaleString(settings.language)}</b></div>
       </div>
       ${comparison}
       <p class="arcade-unlock">${isLast ? t(settings.language, "allClear") : `${t(settings.language, "stageOpen")} · ${Number(nextLevel.code)} ${escapeHtml(nextCopy.title)}`}</p>
@@ -1612,6 +1739,8 @@ function updateHud() {
     loopLimit,
     scoreRun: { radarHits: runRadarHits, retries: runRetries },
     timeBonusCollected,
+    treasure: { collected: treasureCollected, value: treasureValueCollected, nameKey: level.treasure?.nameKey },
+    items: { collected: [...collectedItemIds], bonus: itemBonusScore, shieldCharges: radarShieldCharges },
     player: player ? { x: Math.round(player.x), y: Math.round(player.y), hasGem: player.hasGem, exposure: Number(player.exposure.toFixed(2)) } : null,
     echoes: echoes.map((echo) => ({ x: Math.round(echo.x), y: Math.round(echo.y) })),
     plates: Object.fromEntries(plateStates),
@@ -1847,24 +1976,29 @@ function drawWalls() {
 function drawPlatesAndDoors(now) {
   level.plates.forEach((plate, plateIndex) => {
     const active = plateStates.get(plate.id);
+    const visualRadius = 22;
     ctx.save();
     ctx.translate(plate.x, plate.y);
-    ctx.shadowBlur = active ? 25 : 8;
+    ctx.shadowBlur = active ? 18 : 5;
     ctx.shadowColor = active ? "#7bffd4" : "#2e7890";
     ctx.fillStyle = active ? "rgba(123,255,212,.22)" : "rgba(49,113,135,.14)";
     ctx.strokeStyle = active ? "#7bffd4" : "#377b8f";
     ctx.lineWidth = active ? 4 : 2;
-    ctx.beginPath(); ctx.arc(0, 0, plate.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.rotate(now * 0.0007);
-    ctx.setLineDash([6, 9]);
-    ctx.beginPath(); ctx.arc(0, 0, plate.r - 8, 0, Math.PI * 2); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.rotate(-now * 0.0007);
+    ctx.beginPath(); ctx.arc(0, 0, visualRadius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = active ? 1 : 0.75;
+    ctx.fillStyle = active ? "#7bffd4" : "#6a9baa";
+    ctx.fillRect(-12, -8, 24, 16);
+    ctx.fillStyle = active ? "#173a46" : "#d5eef4";
+    ctx.fillRect(-7, -3, 4, 6);
+    ctx.fillRect(3, -3, 4, 6);
     ctx.fillStyle = active ? "#d9fff2" : "#6a9baa";
-    ctx.font = "900 15px Segoe UI";
+    ctx.font = '900 10px "Galmuri11", "Malgun Gothic", sans-serif';
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(String(plateIndex + 1), 0, 1);
+    ctx.fillStyle = ACTOR_COLORS.outline;
+    ctx.fillRect(-49, 27, 98, 17);
+    ctx.fillStyle = active ? "#d9fff2" : "#ffffff";
+    ctx.fillText(t(settings.language, "echoPlate", { value: plateIndex + 1 }), 0, 36);
     ctx.restore();
   });
 
@@ -1897,70 +2031,133 @@ function drawPlatesAndDoors(now) {
   });
 }
 
-function drawTimeBonus(now) {
-  if (!level.timeBonus || timeBonusCollected) return;
+function drawItems(now) {
   const pulse = reducedMotionQuery.matches ? 0 : Math.floor(now / 180) % 2;
-  const { x, y, bonus } = level.timeBonus;
-  ctx.save();
-  ctx.translate(Math.round(x), Math.round(y));
-  ctx.fillStyle = "rgba(23,35,58,.22)";
-  ctx.fillRect(-18, 19, 36, 7);
-  ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(-18, -18, 36, 36);
-  ctx.fillRect(-23, -7, 46, 14);
-  ctx.fillRect(-7, -23, 14, 46);
-  ctx.fillStyle = pulse ? "#8fd7ff" : "#4f8cff";
-  ctx.fillRect(-14, -14, 28, 28);
-  ctx.fillRect(-19, -4, 38, 8);
-  ctx.fillRect(-4, -19, 8, 38);
-  ctx.fillStyle = "#fff7d6";
-  ctx.fillRect(-3, -11, 6, 12);
-  ctx.fillRect(-3, -3, 11, 6);
-  ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(-25, 29, 50, 17);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = '900 12px "Galmuri11", "Malgun Gothic", sans-serif';
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(t(settings.language, "timeBonusLabel", { value: (bonus / 1000).toFixed(1) }), 0, 38);
-  ctx.restore();
+  for (const item of level.items || []) {
+    if (collectedItemIds.has(item.id)) continue;
+    const type = itemType(item);
+    if (!type) continue;
+    const bob = pulse ? -2 : 0;
+    ctx.save();
+    ctx.translate(Math.round(item.x), Math.round(item.y + bob));
+    ctx.fillStyle = "rgba(23,35,58,.22)";
+    ctx.fillRect(-14, 18, 28, 5);
+    if (item.type === "time") {
+      ctx.fillStyle = ACTOR_COLORS.outline;
+      ctx.fillRect(-14, -14, 28, 28);
+      ctx.fillRect(-18, -5, 36, 10);
+      ctx.fillRect(-5, -18, 10, 36);
+      ctx.fillStyle = type.main;
+      ctx.fillRect(-10, -10, 20, 20);
+      ctx.fillStyle = type.light;
+      ctx.fillRect(-2, -8, 4, 9);
+      ctx.fillRect(-2, -1, 9, 4);
+    } else if (item.type === "shield") {
+      ctx.fillStyle = ACTOR_COLORS.outline;
+      ctx.beginPath(); ctx.moveTo(0, -19); ctx.lineTo(17, -12); ctx.lineTo(14, 8); ctx.lineTo(0, 20); ctx.lineTo(-14, 8); ctx.lineTo(-17, -12); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = type.main;
+      ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(11, -8); ctx.lineTo(9, 5); ctx.lineTo(0, 13); ctx.lineTo(-9, 5); ctx.lineTo(-11, -8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = type.light;
+      ctx.fillRect(-2, -8, 4, 15);
+      ctx.fillRect(-7, -2, 14, 4);
+    } else {
+      ctx.fillStyle = ACTOR_COLORS.outline;
+      ctx.beginPath(); ctx.moveTo(0, -19); ctx.lineTo(15, -3); ctx.lineTo(0, 19); ctx.lineTo(-15, -3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = type.main;
+      ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(10, -2); ctx.lineTo(0, 13); ctx.lineTo(-10, -2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = type.light;
+      ctx.fillRect(-4, -9, 5, 8);
+    }
+    const label = t(settings.language, type.nameKey);
+    ctx.font = '900 9px "Galmuri11", "Malgun Gothic", sans-serif';
+    const labelWidth = clamp(Math.ceil(ctx.measureText(label).width) + 14, 62, 110);
+    ctx.fillStyle = ACTOR_COLORS.outline;
+    ctx.fillRect(-labelWidth / 2, 28, labelWidth, 16);
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, 0, 36);
+    ctx.restore();
+  }
 }
 
 function drawGem(now) {
-  if (player?.hasGem) return;
+  if (treasureCollected) return;
   const phase = Math.floor(now / 120) % 8;
   const bob = [0, -2, -4, -6, -4, -2, 0, 2][phase];
-  const shimmer = [0, 2, 4, 2, 0, -2, -4, -2][phase];
-  const bars = [[-18, 6], [-14, 14], [-10, 20], [-6, 14], [-2, 8], [2, 8], [6, 14], [10, 20], [14, 14], [18, 6]];
+  const shimmer = [0, 2, 3, 2, 0, -2, -3, -2][phase];
+  const treasure = level.treasure || TREASURE_TYPES.clockwork;
+  const palette = treasure.palette;
   ctx.save();
   ctx.translate(Math.round(level.gem.x), Math.round(level.gem.y + bob));
   ctx.fillStyle = "rgba(23,35,58,.24)";
-  ctx.fillRect(-18, 23, 36, 6);
+  ctx.fillRect(-18, 24, 36, 6);
 
+  // Character-scale cut diamond: clear silhouette without dominating the map.
+  ctx.beginPath();
+  ctx.moveTo(-21, -6);
+  ctx.lineTo(-12, -20);
+  ctx.lineTo(12, -20);
+  ctx.lineTo(21, -6);
+  ctx.lineTo(0, 24);
+  ctx.closePath();
   ctx.fillStyle = ACTOR_COLORS.outline;
-  for (const [y, width] of bars) ctx.fillRect(-width / 2 - 2, y - 2, width + 4, 8);
-  ctx.fillStyle = ACTOR_COLORS.target;
-  for (const [y, width] of bars) ctx.fillRect(-width / 2, y, width, 4);
-  ctx.fillStyle = "#fff1a6";
-  ctx.fillRect(-4, -12, 8, 8);
-  ctx.fillStyle = ACTOR_COLORS.echo;
-  ctx.fillRect(-3, -2, 6, 8);
-  ctx.fillRect(-1, -8, 2, 20);
+  ctx.fill();
 
-  ctx.fillStyle = phase % 2 ? "#fff7c7" : ACTOR_COLORS.target;
-  ctx.fillRect(-30 + shimmer, -2, 8, 4);
-  ctx.fillRect(22 - shimmer, -2, 8, 4);
-  ctx.fillRect(-2, -31 + shimmer / 2, 4, 8);
-  ctx.fillRect(-2, 23 - shimmer / 2, 4, 8);
+  ctx.beginPath();
+  ctx.moveTo(-16, -5);
+  ctx.lineTo(-9, -15);
+  ctx.lineTo(9, -15);
+  ctx.lineTo(16, -5);
+  ctx.lineTo(0, 17);
+  ctx.closePath();
+  ctx.fillStyle = palette.main;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(-16, -5);
+  ctx.lineTo(-5, -5);
+  ctx.lineTo(0, 17);
+  ctx.closePath();
+  ctx.fillStyle = palette.dark;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(16, -5);
+  ctx.lineTo(5, -5);
+  ctx.lineTo(0, 17);
+  ctx.closePath();
+  ctx.fillStyle = palette.accent;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-9, -15);
+  ctx.lineTo(-5, -5);
+  ctx.lineTo(5, -5);
+  ctx.lineTo(9, -15);
+  ctx.closePath();
+  ctx.fillStyle = palette.light;
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(-7, -12, 6, 3);
+  ctx.fillRect(-9, -10, 3, 6);
+
+  // Small sparkles preserve pickup readability above a red radar cone.
+  ctx.fillStyle = phase % 2 ? "#ffffff" : "#fff2a8";
+  ctx.fillRect(-29 + shimmer, -2, 8, 3);
+  ctx.fillRect(-27 + shimmer, -5, 3, 9);
+  ctx.fillRect(21 - shimmer, 5, 8, 3);
+  ctx.fillRect(24 - shimmer, 2, 3, 9);
+  ctx.fillRect(-1, -27 + shimmer / 2, 3, 7);
   ctx.restore();
 
+  const label = t(settings.language, treasure.nameKey);
+  ctx.font = '900 9px "Galmuri11", "Malgun Gothic", sans-serif';
+  const labelWidth = clamp(Math.ceil(ctx.measureText(label).width) + 14, 64, 130);
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(level.gem.x - 24, level.gem.y + 37, 48, 15);
-  ctx.fillStyle = "#fff4c7";
-  ctx.font = '900 10px "Cascadia Mono", Consolas, monospace';
+  ctx.fillRect(level.gem.x - labelWidth / 2, level.gem.y + 31, labelWidth, 17);
+  ctx.fillStyle = palette.light;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(t(settings.language, "gem"), level.gem.x, level.gem.y + 44);
+  ctx.fillText(label, level.gem.x, level.gem.y + 39.5);
 }
 
 function drawExit(now) {
@@ -1969,44 +2166,61 @@ function drawExit(now) {
   ctx.save();
   ctx.translate(Math.round(level.exit.x), Math.round(level.exit.y));
   ctx.fillStyle = "rgba(23,35,58,.25)";
-  ctx.fillRect(-20, 30, 48, 7);
+  ctx.fillRect(-23, 29, 46, 6);
 
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(-24, -25, 48, 54);
-  ctx.fillRect(-20, -31, 40, 66);
-  ctx.fillStyle = active ? "#147a61" : "#526270";
-  ctx.fillRect(-19, -24, 38, 53);
-  ctx.fillRect(-15, -28, 30, 61);
-  ctx.fillStyle = active ? ACTOR_COLORS.exit : "#75838d";
-  ctx.fillRect(-14, -21, 28, 48);
-  ctx.fillRect(-10, -25, 20, 56);
+  ctx.fillRect(-23, -27, 46, 58);
+  ctx.fillStyle = active ? "#147a61" : "#6f4435";
+  ctx.fillRect(-19, -23, 38, 50);
+  ctx.fillStyle = active ? ACTOR_COLORS.exit : "#9b5b3d";
+  ctx.fillRect(-15, -19, 30, 42);
 
   if (active) {
+    // The open portal is a dark doorway with animated green forward arrows.
+    ctx.fillStyle = "#102f35";
+    ctx.fillRect(-11, -16, 22, 36);
     ctx.fillStyle = phase % 2 ? "#b8ffe1" : "#8af1c6";
-    for (let y = -18 + phase * 3; y < 24; y += 14) ctx.fillRect(-10, y, 20, 4);
-    ctx.fillStyle = "#f1fff8";
-    ctx.fillRect(-10, -7, 6, 4);
-    ctx.fillRect(-4, -11, 8, 4);
-    ctx.fillRect(4, -7, 6, 4);
-    ctx.fillRect(-10, 6, 6, 4);
-    ctx.fillRect(-4, 2, 8, 4);
-    ctx.fillRect(4, 6, 6, 4);
+    for (let y = -12 + phase; y < 14; y += 13) {
+      ctx.fillRect(-8, y, 5, 4);
+      ctx.fillRect(-3, y + 4, 6, 4);
+      ctx.fillRect(3, y, 5, 4);
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(-29, -3, 7, 4);
+    ctx.fillRect(22, -3, 7, 4);
   } else {
+    // A large rusty padlock communicates the blocked state without relying on text.
+    ctx.strokeStyle = ACTOR_COLORS.outline;
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(0, -6, 10, Math.PI, 0);
+    ctx.stroke();
+    ctx.strokeStyle = "#c27a43";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, -6, 10, Math.PI, 0);
+    ctx.stroke();
     ctx.fillStyle = ACTOR_COLORS.outline;
-    for (let y = -17; y <= 19; y += 9) ctx.fillRect(-11, y, 22, 5);
-    ctx.fillStyle = "#c7d0d5";
-    ctx.fillRect(-3, -3, 6, 12);
-    ctx.fillRect(-7, 1, 14, 5);
+    ctx.fillRect(-16, -5, 32, 26);
+    ctx.fillStyle = "#b8643b";
+    ctx.fillRect(-12, -1, 24, 18);
+    ctx.fillStyle = "#f0a34e";
+    ctx.fillRect(-9, 2, 7, 4);
+    ctx.fillStyle = ACTOR_COLORS.outline;
+    ctx.fillRect(-2, 5, 5, 9);
+    ctx.fillStyle = "rgba(76,38,31,.75)";
+    ctx.fillRect(6, 9, 4, 4);
+    ctx.fillRect(-11, 13, 5, 3);
   }
   ctx.restore();
 
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(level.exit.x - 25, level.exit.y + 39, 50, 15);
-  ctx.fillStyle = active ? "#d8fff0" : "#e4e9eb";
-  ctx.font = '900 10px "Cascadia Mono", Consolas, monospace';
+  ctx.fillRect(level.exit.x - 44, level.exit.y + 37, 88, 18);
+  ctx.fillStyle = active ? "#d8fff0" : "#ffe2bd";
+  ctx.font = '900 10px "Galmuri11", "Malgun Gothic", sans-serif';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(active ? t(settings.language, "exit") : t(settings.language, "lock"), level.exit.x, level.exit.y + 46);
+  ctx.fillText(active ? t(settings.language, "escapeNow") : t(settings.language, "lockedExit"), level.exit.x, level.exit.y + 46);
 }
 
 function drawVisionCones() {
@@ -2118,9 +2332,9 @@ function drawAgent(actor, isEcho = false, index = 0) {
     ctx.translate(Math.round(actor.x), Math.round(actor.y - unit * 11));
     ctx.fillStyle = ACTOR_COLORS.outline;
     ctx.fillRect(-6, -6, 12, 12);
-    ctx.fillStyle = ACTOR_COLORS.target;
+    ctx.fillStyle = level.treasure?.palette?.main || ACTOR_COLORS.target;
     ctx.fillRect(-4, -4, 8, 8);
-    ctx.fillStyle = "#fff4a8";
+    ctx.fillStyle = level.treasure?.palette?.light || "#fff4a8";
     ctx.fillRect(-1, -3, 3, 3);
     ctx.restore();
   }
@@ -2394,7 +2608,7 @@ function render(now) {
   drawExit(visualNow);
   drawPlatesAndDoors(visualNow);
   drawWalls();
-  drawTimeBonus(visualNow);
+  drawItems(visualNow);
   drawGem(visualNow);
   drawMoveTarget(visualNow);
   echoes.forEach(drawEchoTrail);
@@ -2600,6 +2814,8 @@ window.__LOOP_HEIST_DEBUG__ = {
     loopLimit,
     scoreRun: { radarHits: runRadarHits, retries: runRetries },
     timeBonusCollected,
+    treasure: { collected: treasureCollected, value: treasureValueCollected, nameKey: level.treasure?.nameKey },
+    items: { collected: [...collectedItemIds], bonus: itemBonusScore, shieldCharges: radarShieldCharges },
     player: player ? { x: player.x, y: player.y, hasGem: player.hasGem, exposure: player.exposure } : null,
     echoes: echoes.map((echo) => ({ x: echo.x, y: echo.y })),
     plates: Object.fromEntries(plateStates),

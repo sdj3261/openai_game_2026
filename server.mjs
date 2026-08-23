@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
-import { extname, join, normalize } from "node:path";
+import { extname, normalize, resolve, sep } from "node:path";
 
 const port = Number(process.env.LOOP_HEIST_PORT || 4173);
 const hostFlagIndex = process.argv.findIndex((argument) => argument === "--host" || argument.startsWith("--host="));
@@ -23,6 +23,12 @@ const mime = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".vtt": "text/vtt; charset=utf-8",
+  ".srt": "application/x-subrip; charset=utf-8",
+  ".mp4": "video/mp4",
+  ".png": "image/png",
+  ".gif": "image/gif",
+  ".woff2": "font/woff2",
 };
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -44,8 +50,10 @@ function getLanUrls() {
 const server = createServer((request, response) => {
   const requestPath = decodeURIComponent((request.url || "/").split("?")[0]);
   const relative = normalize(requestPath === "/" ? "index.html" : requestPath.replace(/^[/\\]+/, ""));
-  const filePath = join(root, relative);
-  if (!filePath.startsWith(root) || !existsSync(filePath) || !statSync(filePath).isFile()) {
+  let filePath = resolve(root, relative);
+  const insideRoot = filePath === root || filePath.startsWith(`${root}${sep}`);
+  if (insideRoot && existsSync(filePath) && statSync(filePath).isDirectory()) filePath = resolve(filePath, "index.html");
+  if (!insideRoot || !existsSync(filePath) || !statSync(filePath).isFile()) {
     response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
     response.end("Not found");
     return;
