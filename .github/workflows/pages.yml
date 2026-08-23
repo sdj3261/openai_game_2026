@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - master
   workflow_dispatch:
 
 permissions:
@@ -27,11 +26,14 @@ jobs:
         uses: actions/checkout@v6
       - name: Configure Pages
         uses: actions/configure-pages@v5
+      - name: Test game
+        run: npm test
       - name: Prepare static site
         run: |
           mkdir -p _site
           cp index.html design-system.css styles.css game.js input-utils.js profile-utils.js i18n.js _site/
           cp -R assets _site/
+          cp -R demo _site/
           cp .nojekyll _site/.nojekyll
       - name: Upload static site
         uses: actions/upload-pages-artifact@v4

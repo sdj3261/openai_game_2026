@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 
-const expectedVersion = "0.7.0";
+const expectedVersion = "0.8.0";
 const port = 43000 + Math.floor(Math.random() * 1000);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let serverOutput = "";
@@ -97,7 +97,30 @@ try {
   assert(i18n.includes("export const LANGUAGES") && i18n.includes("export function t") && i18n.includes('gameTitle: "8초 도둑단"') && i18n.includes('"08"'), "Translation catalog or eight-stage copy is missing");
   assert(serverOutput.includes(`http://127.0.0.1:${port}`), "CLI --host did not override LOOP_HEIST_HOST");
 
-  console.log(`Smoke test passed: 8초 도둑단 v${expectedVersion}, HTTP ${response.status}, font + sprites + profile + i18n + mobile assets`);
+  const [demoPageResponse, demoVideoResponse, demoPosterResponse, demoVttResponse, demoSrtResponse] = await Promise.all([
+    fetch(`http://127.0.0.1:${port}/demo/`),
+    fetch(`http://127.0.0.1:${port}/demo/8-second-crew-demo.mp4`),
+    fetch(`http://127.0.0.1:${port}/demo/poster.png`),
+    fetch(`http://127.0.0.1:${port}/demo/8-second-crew-demo.vtt`),
+    fetch(`http://127.0.0.1:${port}/demo/8-second-crew-demo.srt`),
+  ]);
+  assert([demoPageResponse, demoVideoResponse, demoPosterResponse, demoVttResponse, demoSrtResponse].every((asset) => asset.ok), "Demo viewer assets failed to load");
+  const [demoPage, demoVideo, demoPoster, demoVtt, demoSrt] = await Promise.all([
+    demoPageResponse.text(),
+    demoVideoResponse.arrayBuffer(),
+    demoPosterResponse.arrayBuffer(),
+    demoVttResponse.text(),
+    demoSrtResponse.text(),
+  ]);
+  const videoBytes = new Uint8Array(demoVideo);
+  const posterBytes = new Uint8Array(demoPoster);
+  assert(demoPage.includes("8-second-crew-demo.mp4") && demoPage.includes("8-second-crew-demo.vtt") && demoPage.includes("poster.png"), "Demo viewer media links are missing");
+  assert(videoBytes.length > 1_000_000 && String.fromCharCode(...videoBytes.slice(4, 8)) === "ftyp", "Demo MP4 is missing or invalid");
+  assert(posterBytes.length > 100_000 && posterBytes[0] === 0x89 && String.fromCharCode(...posterBytes.slice(1, 4)) === "PNG", "Demo poster is missing or invalid");
+  assert(demoVtt.startsWith("WEBVTT") && (demoVtt.match(/-->/g) || []).length === 36, "Demo VTT captions are missing or incomplete");
+  assert((demoSrt.match(/-->/g) || []).length === 36, "Demo SRT captions are missing or incomplete");
+
+  console.log(`Smoke test passed: 8초 도둑단 v${expectedVersion}, HTTP ${response.status}, game + mobile + demo media assets`);
 } finally {
   if (child.exitCode === null) {
     child.kill();

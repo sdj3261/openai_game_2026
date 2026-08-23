@@ -87,27 +87,35 @@ export function calculateStealthScore(metrics = {}) {
   const echoPenalty = extraEchoes * 250;
   const timePenalty = Math.max(0, Math.floor((time - 5000) / 10));
   const totalPenalty = radarPenalty + retryPenalty + echoPenalty + timePenalty;
-  const score = Math.max(0, Math.min(10000, 10000 - totalPenalty));
-  const grade = score >= 9000 ? "S" : score >= 7500 ? "A" : score >= 6000 ? "B" : "C";
+  const stealthScore = Math.max(0, Math.min(10000, 10000 - totalPenalty));
+  const hasCollectibleScore = Object.hasOwn(candidate, "treasureValue") || Object.hasOwn(candidate, "itemBonus");
+  const treasureValue = Math.min(5000, normalizeNonNegativeNumber(candidate.treasureValue, 0, true));
+  const itemBonus = Math.min(5000, normalizeNonNegativeNumber(candidate.itemBonus, 0, true));
+  const collectibleBonus = treasureValue + itemBonus;
+  const score = Math.min(20000, stealthScore + collectibleBonus);
+  // Collectibles improve the leaderboard score, but they must not hide a poor
+  // stealth run. The grade remains a clean read of radar/retry/echo/time play.
+  const grade = stealthScore >= 9000 ? "S" : stealthScore >= 7500 ? "A" : stealthScore >= 6000 ? "B" : "C";
 
-  return {
-    score,
-    grade,
-    breakdown: {
-      baseScore: 10000,
-      radarHits,
-      radarPenalty,
-      retries,
-      retryPenalty,
-      echoes,
-      targetEchoes,
-      extraEchoes,
-      echoPenalty,
-      time,
-      timePenalty,
-      totalPenalty,
-    },
+  const breakdown = {
+    baseScore: 10000,
+    radarHits,
+    radarPenalty,
+    retries,
+    retryPenalty,
+    echoes,
+    targetEchoes,
+    extraEchoes,
+    echoPenalty,
+    time,
+    timePenalty,
+    totalPenalty,
   };
+  // Keep the legacy breakdown shape byte-for-byte compatible for callers that
+  // have not opted into collectible scoring yet.
+  if (hasCollectibleScore) Object.assign(breakdown, { stealthScore, treasureValue, itemBonus, collectibleBonus, gradeScore: stealthScore });
+
+  return { score, grade, breakdown };
 }
 
 function scoreValue(value) {
@@ -121,7 +129,7 @@ function hasCompletionScore(record) {
 }
 
 function completionScoreValue(record) {
-  return Math.max(0, Math.min(10000, finiteNumber(record.score)));
+  return Math.max(0, Math.min(20000, finiteNumber(record.score)));
 }
 
 function completionCountValue(value) {
