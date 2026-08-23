@@ -1,0 +1,7 @@
+Asset type: game-ready 2D player idle sprite sheet and small game mascot icon for 8초 도둑단
+
+Create exactly four idle animation frames in an exact 2x2 invisible grid for one original cute clockwork time-thief robot. Prioritize instant readability at very small sizes. Use an oversized rounded turquoise clock-helmet, deep navy single-piece face visor with two tiny mint eyes, compact cream torso, very short cobalt legs, coral time-scarf tab, and one small off-center wind-up key shaped like a clock hand. No exposed human face, hands, or gloves.
+
+Use a top-down 3/4 view from slightly above and original crisp retro pixel art with a bold dark outline, large clean color clusters, a limited palette, and very little internal detail. Motion: neutral, a tiny vertical squash, scarf tab flick with clock-key tick, return to neutral. Both feet and the body root remain on exactly the same baseline. Keep identical camera distance and anatomical scale with generous magenta padding.
+
+Background must be 100% solid flat #FF00FF. No visible grid, borders, labels, text, UI, shadow plate, detached effects, sparks, edge crossing, per-frame zoom, Bomberman character details, antenna ball, white gloves, pink limbs, belt buckle, Mario characters or trade dress, copyrighted characters, or watermark.

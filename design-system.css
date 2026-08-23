@@ -1,0 +1,161 @@
+/* Galmuri11 Bold v2.40.4 — SIL Open Font License 1.1. */
+@font-face {
+  font-family: "Galmuri11";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/Galmuri11-Bold.woff2") format("woff2");
+}
+
+/* 8초 도둑단 design tokens: bright clockwork toys, readable Korean, clear focus. */
+:root {
+  color-scheme: light;
+
+  --font-ui: "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Yu Gothic UI", Meiryo, sans-serif;
+  --font-game-ko: "Galmuri11", var(--font-ui);
+  --font-display-en: "Arial Rounded MT Bold", "Trebuchet MS", "Arial Black", sans-serif;
+  --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  --font-sans: var(--font-ui);
+
+  --toy-sky: #79dbff;
+  --toy-sky-soft: #dff7ff;
+  --toy-cream: #fff3c9;
+  --toy-paper: #fffdf3;
+  --toy-ink: #26365f;
+  --toy-blue: #3d72dc;
+  --toy-coral: #ef6262;
+  --toy-gold: #ffd24a;
+  --toy-mint: #62d9ad;
+  --toy-violet: #856ed3;
+  --toy-line: #31446f;
+  --toy-shadow: rgb(38 54 95 / 0.28);
+
+  --surface-app: var(--toy-sky-soft);
+  --surface-panel: var(--toy-paper);
+  --text-primary: var(--toy-ink);
+  --text-secondary: #50618a;
+  --text-muted: #68779a;
+  --text-inverse: #ffffff;
+
+  /* Location colors change at runtime inside the canvas and diorama. */
+  --theme-floor: #eadcb9;
+  --theme-glow: #f7ebcc;
+  --theme-glow-rgb: 247 235 204;
+  --theme-accent: #247fb8;
+  --theme-accent-rgb: 36 127 184;
+
+  /* Gameplay meaning stays stable across every stage. */
+  --state-echo: #25a9da;
+  --state-success: #238c69;
+  --state-warning: #9a6100;
+  --state-danger: #cc354f;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --control-size: 48px;
+  --focus-ring: 0 0 0 3px #ffffff, 0 0 0 7px var(--toy-blue);
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html {
+  min-height: 100%;
+  background: var(--surface-app);
+  font-synthesis: none;
+}
+
+body {
+  min-height: 100dvh;
+  margin: 0;
+  color: var(--text-primary);
+  background: var(--surface-app);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  word-break: keep-all;
+}
+
+html:lang(ja) body { word-break: normal; }
+
+button,
+input,
+select,
+textarea,
+kbd { font: inherit; }
+
+button,
+input,
+select { color: inherit; }
+
+button { border: 0; }
+
+button:focus-visible,
+a:focus-visible,
+canvas:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+input[type="checkbox"] { accent-color: var(--toy-blue); }
+
+[lang="en"],
+.font-display-en { font-family: var(--font-display-en); }
+
+.ds-surface {
+  border: 2px solid var(--toy-line);
+  background: var(--surface-panel);
+}
+
+.skip-link {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  z-index: 2000;
+  min-height: var(--control-size);
+  padding: 10px 16px;
+  color: var(--toy-ink);
+  border: 2px solid var(--toy-ink);
+  border-radius: var(--radius-sm);
+  background: var(--toy-gold);
+  font-weight: 900;
+  transform: translateY(-180%);
+}
+
+.skip-link:focus { transform: translateY(0); }
+
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :root { --focus-ring: 0 0 0 3px Highlight; }
+  .ds-surface,
+  .skip-link { border-color: CanvasText; }
+}

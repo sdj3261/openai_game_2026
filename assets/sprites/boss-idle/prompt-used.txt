@@ -1,0 +1,7 @@
+Asset type: game-ready 2D boss idle sprite sheet for 8초 도둑단
+
+Create exactly nine idle animation frames in an exact 3x3 invisible grid for one original toy-clockwork stealth boss named the Time Warden. The boss is a large squat purple-and-crimson clockwork guard automaton with broad shoulders, short rooted feet, a cream metal face plate, one bright red lens eye, four gold clock-tick fins forming a small mechanical halo, and a dark navy outline. It must clearly read as a heavier enemy while remaining cute and toy-like.
+
+Use a top-down 3/4 view from slightly above and original crisp retro pixel art. Keep both feet and pelvis fixed. Animate subtle vertical torso compression, red lens pulse, shoulder settling, and one-at-a-time clock-halo tick glow. Center the boss in every equal cell at the same camera distance, scale, and bounding envelope, filling only 55% to 62% of each cell.
+
+Background must be 100% solid flat #FF00FF. No visible grid, borders, labels, text, UI, shadow plate, detached particles, edge crossing, Mario characters or trade dress, Bowser-like features, turtles, spiked shells, red caps, moustaches, mushrooms, pipes, question blocks, stars, coins, copyrighted characters, or watermark.

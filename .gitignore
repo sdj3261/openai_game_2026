@@ -1,21 +1,2 @@
-node_modules
-dist
-.DS_Store
-.env
-.env.*
-!.env.example
-*.local
-*.log
-*.pem
-*.key
-*.p12
-*.pfx
-*.sqlite*
-coverage
-.vite
-.cache
-.vercel
-.wrangler
-playwright-report
-test-results
-tmp
+# Rejected local sprite draft; the accepted asset is hero-idle-v2.
+/assets/sprites/hero-idle/

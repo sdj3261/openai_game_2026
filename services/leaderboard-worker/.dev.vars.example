@@ -1,6 +1,0 @@
-SEASON_ID="challenge-2026"
-SCENARIO_ID="earth-2026-standard"
-ALLOWED_SEEDS="0"
-# Comma-separated additions. The official GitHub Pages origin and common
-# localhost development origins are always present in the built-in allowlist.
-EXTRA_ALLOWED_ORIGINS=""
