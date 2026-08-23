@@ -4,7 +4,7 @@
 >
 > 8초 동안 움직인 동선을 분신으로 저장하고 과거의 나와 역할을 나눠 보석을 훔치는 1인 협동 타임루프 잠입 퍼즐
 
-**OPENAI GAME 2026 제출작 · v0.8.0**
+**OPENAI GAME 2026 제출작 · v0.8.1**
 
 [게임 바로 플레이](https://sdj3261.github.io/openai_game_2026/) · [3분 데모 영상](https://sdj3261.github.io/openai_game_2026/demo/) · [MP4 바로 보기](https://sdj3261.github.io/openai_game_2026/demo/8-second-crew-demo.mp4)
 

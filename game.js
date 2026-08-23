@@ -1,4 +1,4 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.8.0";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.8.1";
 import {
   PROFILE_COLORS,
   PROFILE_FACES,
@@ -7,8 +7,8 @@ import {
   getWorldLeaderboard,
   getWorldTopRecords,
   normalizeProfile,
-} from "./profile-utils.js?v=0.8.0";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.8.0";
+} from "./profile-utils.js?v=0.8.1";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.8.1";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -2091,73 +2091,73 @@ function drawGem(now) {
   ctx.save();
   ctx.translate(Math.round(level.gem.x), Math.round(level.gem.y + bob));
   ctx.fillStyle = "rgba(23,35,58,.24)";
-  ctx.fillRect(-18, 24, 36, 6);
+  ctx.fillRect(-10, 15, 20, 4);
 
   // Character-scale cut diamond: clear silhouette without dominating the map.
   ctx.beginPath();
-  ctx.moveTo(-21, -6);
-  ctx.lineTo(-12, -20);
-  ctx.lineTo(12, -20);
-  ctx.lineTo(21, -6);
-  ctx.lineTo(0, 24);
+  ctx.moveTo(-11, -4);
+  ctx.lineTo(-6, -12);
+  ctx.lineTo(6, -12);
+  ctx.lineTo(11, -4);
+  ctx.lineTo(0, 14);
   ctx.closePath();
   ctx.fillStyle = ACTOR_COLORS.outline;
   ctx.fill();
 
   ctx.beginPath();
-  ctx.moveTo(-16, -5);
-  ctx.lineTo(-9, -15);
-  ctx.lineTo(9, -15);
-  ctx.lineTo(16, -5);
-  ctx.lineTo(0, 17);
+  ctx.moveTo(-8, -3);
+  ctx.lineTo(-5, -8);
+  ctx.lineTo(5, -8);
+  ctx.lineTo(8, -3);
+  ctx.lineTo(0, 10);
   ctx.closePath();
   ctx.fillStyle = palette.main;
   ctx.fill();
 
   ctx.beginPath();
-  ctx.moveTo(-16, -5);
-  ctx.lineTo(-5, -5);
-  ctx.lineTo(0, 17);
+  ctx.moveTo(-8, -3);
+  ctx.lineTo(-3, -3);
+  ctx.lineTo(0, 10);
   ctx.closePath();
   ctx.fillStyle = palette.dark;
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(16, -5);
-  ctx.lineTo(5, -5);
-  ctx.lineTo(0, 17);
+  ctx.moveTo(8, -3);
+  ctx.lineTo(3, -3);
+  ctx.lineTo(0, 10);
   ctx.closePath();
   ctx.fillStyle = palette.accent;
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(-9, -15);
-  ctx.lineTo(-5, -5);
-  ctx.lineTo(5, -5);
-  ctx.lineTo(9, -15);
+  ctx.moveTo(-5, -8);
+  ctx.lineTo(-3, -3);
+  ctx.lineTo(3, -3);
+  ctx.lineTo(5, -8);
   ctx.closePath();
   ctx.fillStyle = palette.light;
   ctx.fill();
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(-7, -12, 6, 3);
-  ctx.fillRect(-9, -10, 3, 6);
+  ctx.fillRect(-3, -7, 3, 2);
+  ctx.fillRect(-5, -6, 2, 4);
 
   // Small sparkles preserve pickup readability above a red radar cone.
   ctx.fillStyle = phase % 2 ? "#ffffff" : "#fff2a8";
-  ctx.fillRect(-29 + shimmer, -2, 8, 3);
-  ctx.fillRect(-27 + shimmer, -5, 3, 9);
-  ctx.fillRect(21 - shimmer, 5, 8, 3);
-  ctx.fillRect(24 - shimmer, 2, 3, 9);
-  ctx.fillRect(-1, -27 + shimmer / 2, 3, 7);
+  ctx.fillRect(-17 + shimmer, -1, 4, 2);
+  ctx.fillRect(-16 + shimmer, -3, 2, 5);
+  ctx.fillRect(13 - shimmer, 3, 4, 2);
+  ctx.fillRect(14 - shimmer, 1, 2, 5);
+  ctx.fillRect(-1, -17 + shimmer / 2, 2, 4);
   ctx.restore();
 
   const label = t(settings.language, treasure.nameKey);
-  ctx.font = '900 9px "Galmuri11", "Malgun Gothic", sans-serif';
-  const labelWidth = clamp(Math.ceil(ctx.measureText(label).width) + 14, 64, 130);
+  ctx.font = '900 8px "Galmuri11", "Malgun Gothic", sans-serif';
+  const labelWidth = clamp(Math.ceil(ctx.measureText(label).width) + 8, 48, 100);
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(level.gem.x - labelWidth / 2, level.gem.y + 31, labelWidth, 17);
+  ctx.fillRect(level.gem.x - labelWidth / 2, level.gem.y + 20, labelWidth, 13);
   ctx.fillStyle = palette.light;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(label, level.gem.x, level.gem.y + 39.5);
+  ctx.fillText(label, level.gem.x, level.gem.y + 26.5);
 }
 
 function drawExit(now) {
@@ -2166,61 +2166,61 @@ function drawExit(now) {
   ctx.save();
   ctx.translate(Math.round(level.exit.x), Math.round(level.exit.y));
   ctx.fillStyle = "rgba(23,35,58,.25)";
-  ctx.fillRect(-23, 29, 46, 6);
+  ctx.fillRect(-14, 18, 28, 4);
 
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(-23, -27, 46, 58);
+  ctx.fillRect(-14, -18, 28, 38);
   ctx.fillStyle = active ? "#147a61" : "#6f4435";
-  ctx.fillRect(-19, -23, 38, 50);
+  ctx.fillRect(-11, -15, 22, 31);
   ctx.fillStyle = active ? ACTOR_COLORS.exit : "#9b5b3d";
-  ctx.fillRect(-15, -19, 30, 42);
+  ctx.fillRect(-8, -12, 16, 25);
 
   if (active) {
     // The open portal is a dark doorway with animated green forward arrows.
     ctx.fillStyle = "#102f35";
-    ctx.fillRect(-11, -16, 22, 36);
+    ctx.fillRect(-6, -10, 12, 21);
     ctx.fillStyle = phase % 2 ? "#b8ffe1" : "#8af1c6";
-    for (let y = -12 + phase; y < 14; y += 13) {
-      ctx.fillRect(-8, y, 5, 4);
-      ctx.fillRect(-3, y + 4, 6, 4);
-      ctx.fillRect(3, y, 5, 4);
+    for (let y = -8 + phase; y < 8; y += 9) {
+      ctx.fillRect(-4, y, 3, 2);
+      ctx.fillRect(-1, y + 2, 3, 2);
+      ctx.fillRect(2, y, 3, 2);
     }
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(-29, -3, 7, 4);
-    ctx.fillRect(22, -3, 7, 4);
+    ctx.fillRect(-18, -1, 4, 2);
+    ctx.fillRect(14, -1, 4, 2);
   } else {
-    // A large rusty padlock communicates the blocked state without relying on text.
+    // A rusty padlock communicates the blocked state without relying on text.
     ctx.strokeStyle = ACTOR_COLORS.outline;
-    ctx.lineWidth = 7;
+    ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.arc(0, -6, 10, Math.PI, 0);
+    ctx.arc(0, -4, 6, Math.PI, 0);
     ctx.stroke();
     ctx.strokeStyle = "#c27a43";
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(0, -6, 10, Math.PI, 0);
+    ctx.arc(0, -4, 6, Math.PI, 0);
     ctx.stroke();
     ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(-16, -5, 32, 26);
+    ctx.fillRect(-10, -3, 20, 17);
     ctx.fillStyle = "#b8643b";
-    ctx.fillRect(-12, -1, 24, 18);
+    ctx.fillRect(-7, 0, 14, 11);
     ctx.fillStyle = "#f0a34e";
-    ctx.fillRect(-9, 2, 7, 4);
+    ctx.fillRect(-5, 2, 5, 2);
     ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(-2, 5, 5, 9);
+    ctx.fillRect(-2, 4, 4, 6);
     ctx.fillStyle = "rgba(76,38,31,.75)";
-    ctx.fillRect(6, 9, 4, 4);
-    ctx.fillRect(-11, 13, 5, 3);
+    ctx.fillRect(4, 6, 2, 2);
+    ctx.fillRect(-7, 8, 3, 2);
   }
   ctx.restore();
 
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(level.exit.x - 44, level.exit.y + 37, 88, 18);
+  ctx.fillRect(level.exit.x - 32, level.exit.y + 24, 64, 14);
   ctx.fillStyle = active ? "#d8fff0" : "#ffe2bd";
-  ctx.font = '900 10px "Galmuri11", "Malgun Gothic", sans-serif';
+  ctx.font = '900 9px "Galmuri11", "Malgun Gothic", sans-serif';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(active ? t(settings.language, "escapeNow") : t(settings.language, "lockedExit"), level.exit.x, level.exit.y + 46);
+  ctx.fillText(active ? t(settings.language, "escapeNow") : t(settings.language, "lockedExit"), level.exit.x, level.exit.y + 31);
 }
 
 function drawVisionCones() {
