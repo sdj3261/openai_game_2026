@@ -31,7 +31,7 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p _site
-          cp index.html design-system.css styles.css game.js input-utils.js profile-utils.js i18n.js _site/
+          cp index.html favicon.ico site.webmanifest design-system.css styles.css game.js input-utils.js profile-utils.js i18n.js _site/
           cp -R assets _site/
           cp -R demo _site/
           cp .nojekyll _site/.nojekyll

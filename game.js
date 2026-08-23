@@ -1,14 +1,15 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.8.1";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.8.2";
 import {
   PROFILE_COLORS,
   PROFILE_FACES,
+  STEALTH_GRADE_THRESHOLDS,
   calculateStealthScore,
   compareCompletionRecords,
   getWorldLeaderboard,
   getWorldTopRecords,
   normalizeProfile,
-} from "./profile-utils.js?v=0.8.1";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.8.1";
+} from "./profile-utils.js?v=0.8.2";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.8.2";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -1519,6 +1520,7 @@ function completeLevel() {
     itemBonus: itemBonusScore,
     itemsCollected: collectedItemIds.size,
     score: scoreResult.score,
+    stealthScore: scoreResult.breakdown.stealthScore,
     grade: scoreResult.grade,
     name: profile.name,
     color: profile.color,
@@ -1565,12 +1567,19 @@ function showCompleteOverlay() {
       treasureValue: treasureValueCollected,
       itemBonus: itemBonusScore,
       itemsCollected: collectedItemIds.size,
+      stealthScore: fallbackScore.breakdown.stealthScore,
       ...fallbackScore,
     },
     previousBest: null,
     newBest: false,
     rank: null,
   };
+  const stealthScore = Number.isFinite(Number(result.run.stealthScore))
+    ? Math.max(0, Math.min(10000, Math.round(Number(result.run.stealthScore))))
+    : Math.max(0, Math.min(10000, Math.round(Number(fallbackScore.breakdown.stealthScore || 0))));
+  const gradeCriteria = STEALTH_GRADE_THRESHOLDS.map(({ grade, min }) => `
+    <span class="grade-rule ${grade === result.run.grade ? "is-current" : ""}">${grade} ${Number(min).toLocaleString(settings.language)}+</span>
+  `).join("");
   const comparison = result.newBest
     ? `<p class="clear-record is-best"><b>${t(settings.language, "newBest")}</b>${result.previousBest ? `<span>${t(settings.language, "previousBest")} ${formatRecordScore(result.previousBest)} → ${formatRecordScore(result.run)}</span>` : ""}</p>`
     : `<p class="clear-record"><b>${t(settings.language, "deviceRank")} #${result.rank || "-"}</b><span>${t(settings.language, "best")} ${formatRecordScore(getWorldTopRecords(completionRecords, level.code, 1)[0] || result.run)}</span></p>`;
@@ -1579,7 +1588,14 @@ function showCompleteOverlay() {
       <p class="arcade-clear__world">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length}</p>
       <h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "clear")}</h2>
       <strong>${escapeHtml(stageCopy.title)}</strong>
-      <div class="arcade-clear__stars clear-grade" aria-label="${t(settings.language, "grade")} ${result.run.grade}">${result.run.grade} · ${Number(result.run.score).toLocaleString(settings.language)}</div>
+      <div class="arcade-clear__stars clear-grade" aria-label="${t(settings.language, "rankLabel", { value: result.run.grade })}. ${t(settings.language, "totalScore")} ${Number(result.run.score).toLocaleString(settings.language)}">
+        <b>${t(settings.language, "rankLabel", { value: result.run.grade })}</b>
+        <span>${t(settings.language, "totalScore")} <strong>${t(settings.language, "scorePoints", { value: Number(result.run.score).toLocaleString(settings.language) })}</strong></span>
+      </div>
+      <div class="grade-criteria">
+        <p><b>${t(settings.language, "rankCriteria")}</b><span>${t(settings.language, "stealthScore")} ${t(settings.language, "scorePoints", { value: stealthScore.toLocaleString(settings.language) })}</span></p>
+        <div>${gradeCriteria}</div>
+      </div>
       <div class="arcade-score">
         <div><span>${t(settings.language, "radarHits")}</span><b>${result.run.radarHits}</b></div>
         <div><span>${t(settings.language, "retries")}</span><b>${result.run.retries}</b></div>
@@ -1597,7 +1613,7 @@ function showCompleteOverlay() {
       </div>
     </section>
   `, "complete");
-  announce(`${t(settings.language, "stage")} ${Number(level.code)} ${t(settings.language, "clear")}. ${t(settings.language, "score")} ${result.run.score}. ${t(settings.language, "recordSummary", { time: (completedLoopElapsed / 1000).toFixed(2), echoes: echoes.length })}`);
+  announce(`${t(settings.language, "stage")} ${Number(level.code)} ${t(settings.language, "clear")}. ${t(settings.language, "rankLabel", { value: result.run.grade })}. ${t(settings.language, "totalScore")} ${result.run.score}. ${t(settings.language, "recordSummary", { time: (completedLoopElapsed / 1000).toFixed(2), echoes: echoes.length })}`);
   document.querySelector("#nextAction").addEventListener("click", () => {
     if (isLast) showMenu();
     else startLevel(levelIndex + 1);
@@ -2091,73 +2107,73 @@ function drawGem(now) {
   ctx.save();
   ctx.translate(Math.round(level.gem.x), Math.round(level.gem.y + bob));
   ctx.fillStyle = "rgba(23,35,58,.24)";
-  ctx.fillRect(-10, 15, 20, 4);
+  ctx.fillRect(-12, 19, 24, 4);
 
   // Character-scale cut diamond: clear silhouette without dominating the map.
   ctx.beginPath();
-  ctx.moveTo(-11, -4);
-  ctx.lineTo(-6, -12);
-  ctx.lineTo(6, -12);
-  ctx.lineTo(11, -4);
-  ctx.lineTo(0, 14);
+  ctx.moveTo(-14, -5);
+  ctx.lineTo(-8, -14);
+  ctx.lineTo(8, -14);
+  ctx.lineTo(14, -5);
+  ctx.lineTo(0, 18);
   ctx.closePath();
   ctx.fillStyle = ACTOR_COLORS.outline;
   ctx.fill();
 
   ctx.beginPath();
-  ctx.moveTo(-8, -3);
-  ctx.lineTo(-5, -8);
-  ctx.lineTo(5, -8);
-  ctx.lineTo(8, -3);
-  ctx.lineTo(0, 10);
+  ctx.moveTo(-10, -4);
+  ctx.lineTo(-6, -10);
+  ctx.lineTo(6, -10);
+  ctx.lineTo(10, -4);
+  ctx.lineTo(0, 13);
   ctx.closePath();
   ctx.fillStyle = palette.main;
   ctx.fill();
 
   ctx.beginPath();
-  ctx.moveTo(-8, -3);
-  ctx.lineTo(-3, -3);
-  ctx.lineTo(0, 10);
+  ctx.moveTo(-10, -4);
+  ctx.lineTo(-4, -4);
+  ctx.lineTo(0, 13);
   ctx.closePath();
   ctx.fillStyle = palette.dark;
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(8, -3);
-  ctx.lineTo(3, -3);
-  ctx.lineTo(0, 10);
+  ctx.moveTo(10, -4);
+  ctx.lineTo(4, -4);
+  ctx.lineTo(0, 13);
   ctx.closePath();
   ctx.fillStyle = palette.accent;
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(-5, -8);
-  ctx.lineTo(-3, -3);
-  ctx.lineTo(3, -3);
-  ctx.lineTo(5, -8);
+  ctx.moveTo(-6, -10);
+  ctx.lineTo(-4, -4);
+  ctx.lineTo(4, -4);
+  ctx.lineTo(6, -10);
   ctx.closePath();
   ctx.fillStyle = palette.light;
   ctx.fill();
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(-3, -7, 3, 2);
-  ctx.fillRect(-5, -6, 2, 4);
+  ctx.fillRect(-4, -8, 4, 2);
+  ctx.fillRect(-6, -7, 2, 5);
 
   // Small sparkles preserve pickup readability above a red radar cone.
   ctx.fillStyle = phase % 2 ? "#ffffff" : "#fff2a8";
-  ctx.fillRect(-17 + shimmer, -1, 4, 2);
-  ctx.fillRect(-16 + shimmer, -3, 2, 5);
-  ctx.fillRect(13 - shimmer, 3, 4, 2);
-  ctx.fillRect(14 - shimmer, 1, 2, 5);
-  ctx.fillRect(-1, -17 + shimmer / 2, 2, 4);
+  ctx.fillRect(-20 + shimmer, -1, 5, 2);
+  ctx.fillRect(-19 + shimmer, -4, 2, 7);
+  ctx.fillRect(15 - shimmer, 4, 5, 2);
+  ctx.fillRect(17 - shimmer, 1, 2, 7);
+  ctx.fillRect(-1, -19 + shimmer / 2, 2, 4);
   ctx.restore();
 
   const label = t(settings.language, treasure.nameKey);
   ctx.font = '900 8px "Galmuri11", "Malgun Gothic", sans-serif';
   const labelWidth = clamp(Math.ceil(ctx.measureText(label).width) + 8, 48, 100);
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(level.gem.x - labelWidth / 2, level.gem.y + 20, labelWidth, 13);
+  ctx.fillRect(level.gem.x - labelWidth / 2, level.gem.y + 24, labelWidth, 13);
   ctx.fillStyle = palette.light;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(label, level.gem.x, level.gem.y + 26.5);
+  ctx.fillText(label, level.gem.x, level.gem.y + 30.5);
 }
 
 function drawExit(now) {
@@ -2166,61 +2182,61 @@ function drawExit(now) {
   ctx.save();
   ctx.translate(Math.round(level.exit.x), Math.round(level.exit.y));
   ctx.fillStyle = "rgba(23,35,58,.25)";
-  ctx.fillRect(-14, 18, 28, 4);
+  ctx.fillRect(-16, 21, 32, 4);
 
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(-14, -18, 28, 38);
+  ctx.fillRect(-16, -20, 32, 43);
   ctx.fillStyle = active ? "#147a61" : "#6f4435";
-  ctx.fillRect(-11, -15, 22, 31);
+  ctx.fillRect(-13, -17, 26, 36);
   ctx.fillStyle = active ? ACTOR_COLORS.exit : "#9b5b3d";
-  ctx.fillRect(-8, -12, 16, 25);
+  ctx.fillRect(-10, -14, 20, 30);
 
   if (active) {
     // The open portal is a dark doorway with animated green forward arrows.
     ctx.fillStyle = "#102f35";
-    ctx.fillRect(-6, -10, 12, 21);
+    ctx.fillRect(-8, -12, 16, 26);
     ctx.fillStyle = phase % 2 ? "#b8ffe1" : "#8af1c6";
-    for (let y = -8 + phase; y < 8; y += 9) {
-      ctx.fillRect(-4, y, 3, 2);
-      ctx.fillRect(-1, y + 2, 3, 2);
+    for (let y = -9 + phase; y < 10; y += 10) {
+      ctx.fillRect(-5, y, 3, 2);
+      ctx.fillRect(-2, y + 2, 4, 3);
       ctx.fillRect(2, y, 3, 2);
     }
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(-18, -1, 4, 2);
-    ctx.fillRect(14, -1, 4, 2);
+    ctx.fillRect(-20, -1, 4, 2);
+    ctx.fillRect(16, -1, 4, 2);
   } else {
     // A rusty padlock communicates the blocked state without relying on text.
     ctx.strokeStyle = ACTOR_COLORS.outline;
     ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.arc(0, -4, 6, Math.PI, 0);
+    ctx.arc(0, -5, 7, Math.PI, 0);
     ctx.stroke();
     ctx.strokeStyle = "#c27a43";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(0, -4, 6, Math.PI, 0);
+    ctx.arc(0, -5, 7, Math.PI, 0);
     ctx.stroke();
     ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(-10, -3, 20, 17);
+    ctx.fillRect(-11, -4, 22, 19);
     ctx.fillStyle = "#b8643b";
-    ctx.fillRect(-7, 0, 14, 11);
+    ctx.fillRect(-8, -1, 16, 13);
     ctx.fillStyle = "#f0a34e";
-    ctx.fillRect(-5, 2, 5, 2);
+    ctx.fillRect(-6, 2, 5, 3);
     ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(-2, 4, 4, 6);
+    ctx.fillRect(-2, 5, 4, 7);
     ctx.fillStyle = "rgba(76,38,31,.75)";
-    ctx.fillRect(4, 6, 2, 2);
-    ctx.fillRect(-7, 8, 3, 2);
+    ctx.fillRect(5, 7, 2, 2);
+    ctx.fillRect(-8, 9, 3, 2);
   }
   ctx.restore();
 
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(level.exit.x - 32, level.exit.y + 24, 64, 14);
+  ctx.fillRect(level.exit.x - 34, level.exit.y + 27, 68, 14);
   ctx.fillStyle = active ? "#d8fff0" : "#ffe2bd";
   ctx.font = '900 9px "Galmuri11", "Malgun Gothic", sans-serif';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(active ? t(settings.language, "escapeNow") : t(settings.language, "lockedExit"), level.exit.x, level.exit.y + 31);
+  ctx.fillText(active ? t(settings.language, "escapeNow") : t(settings.language, "lockedExit"), level.exit.x, level.exit.y + 34);
 }
 
 function drawVisionCones() {

@@ -9,6 +9,12 @@ export const PROFILE_COLORS = Object.freeze([
 
 export const PROFILE_FACES = Object.freeze(["•ᴗ•", "^‿^", ">ᴗ<", "◉‿◉", "ᵔᴥᵔ", "¬‿¬"]);
 export const PROFILE_NAME_MAX_LENGTH = 12;
+export const STEALTH_GRADE_THRESHOLDS = Object.freeze([
+  Object.freeze({ grade: "S", min: 9000 }),
+  Object.freeze({ grade: "A", min: 7500 }),
+  Object.freeze({ grade: "B", min: 6000 }),
+  Object.freeze({ grade: "C", min: 0 }),
+]);
 export const DEFAULT_PROFILE = Object.freeze({
   name: "지금이",
   color: PROFILE_COLORS[0],
@@ -95,7 +101,7 @@ export function calculateStealthScore(metrics = {}) {
   const score = Math.min(20000, stealthScore + collectibleBonus);
   // Collectibles improve the leaderboard score, but they must not hide a poor
   // stealth run. The grade remains a clean read of radar/retry/echo/time play.
-  const grade = stealthScore >= 9000 ? "S" : stealthScore >= 7500 ? "A" : stealthScore >= 6000 ? "B" : "C";
+  const grade = STEALTH_GRADE_THRESHOLDS.find((threshold) => stealthScore >= threshold.min)?.grade || "C";
 
   const breakdown = {
     baseScore: 10000,

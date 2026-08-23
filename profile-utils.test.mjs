@@ -6,6 +6,7 @@ import {
   PROFILE_COLORS,
   PROFILE_FACES,
   PROFILE_NAME_MAX_LENGTH,
+  STEALTH_GRADE_THRESHOLDS,
   calculateStealthScore,
   compareCompletionRecords,
   getTopRecordsByWorld,
@@ -22,6 +23,8 @@ import {
 test("profile option constants are immutable and have safe defaults", () => {
   assert.ok(Object.isFrozen(PROFILE_COLORS));
   assert.ok(Object.isFrozen(PROFILE_FACES));
+  assert.ok(Object.isFrozen(STEALTH_GRADE_THRESHOLDS));
+  assert.deepEqual(STEALTH_GRADE_THRESHOLDS.map(({ grade, min }) => [grade, min]), [["S", 9000], ["A", 7500], ["B", 6000], ["C", 0]]);
   assert.ok(PROFILE_COLORS.includes(DEFAULT_PROFILE.color));
   assert.ok(PROFILE_FACES.includes(DEFAULT_PROFILE.face));
   assert.equal(new Set(PROFILE_COLORS).size, PROFILE_COLORS.length);
