@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 
-const expectedVersion = "0.13.0";
+const expectedVersion = "0.14.0";
 const port = 43000 + Math.floor(Math.random() * 1000);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let serverOutput = "";
@@ -67,6 +67,7 @@ try {
     'data-game-action="noise"',
     'data-game-action="save"',
     'data-game-action="game-menu"',
+    'id="overlay"',
     'aria-keyshortcuts="Z"',
     'aria-keyshortcuts="X"',
     "경비원 도발",
@@ -75,6 +76,7 @@ try {
   const missingHtml = requiredHtml.filter((value) => !html.includes(value));
   if (missingHtml.length) throw new Error(`Served HTML is missing: ${missingHtml.join(", ")}`);
   assert(!html.includes('data-game-action="undo"') && !html.includes("분신 지우기"), "Removed clone-delete control is still exposed");
+  assert(html.indexOf('id="overlay"') > html.indexOf("</main>"), "Global dialog layer must be a direct body child outside the clipped game field");
 
   const sourceAssetPaths = [
     `/design-system.css?v=${expectedVersion}`,
@@ -111,6 +113,7 @@ try {
   assert(tokens.includes("--font-game-ko") && tokens.includes("Galmuri11-Bold.woff2"), "Bundled Korean game font token is missing");
   assert(appCss.includes(".virtual-stick") && appCss.includes(".mobile-action") && appCss.includes(".game-guide"), "Mobile control or settings-guide styles are missing");
   assert(appCss.includes(".game-menu-dialog") && appCss.includes('.overlay[data-view="caught"]') && appCss.includes(".caught-dialog"), "Game menu or red caught-dialog styles are missing");
+  assert(appCss.includes("body > .overlay") && appCss.includes("z-index: 10000") && appCss.includes("body.dialog-open > .game-shell"), "Global dialog stacking and background-input protection are missing");
   assert(fontBytes.length > 100000 && String.fromCharCode(...fontBytes.slice(0, 4)) === "wOF2", "Bundled Galmuri11 font is missing or invalid");
   assert(fontLicense.includes("SIL Open Font License, Version 1.1") && fontLicense.includes("Lee Minseo"), "Bundled font license is missing or invalid");
   for (let index = 0; index < spriteBundleBases.length; index += 1) {
@@ -146,10 +149,12 @@ try {
   assert(!game.includes("requiredNoiseEchoes") && !game.includes("requiredEchoes"), "Exit still has a hidden clone or noise requirement");
   const gameMenuSource = game.match(/function showGameMenu\(\)[\s\S]*?function showCaughtOverlay/)?.[0] || "";
   const caughtSource = game.match(/function showCaughtOverlay\([\s\S]*?function showRecordsOverlay/)?.[0] || "";
+  const catchPlayerSource = game.match(/function catchPlayer\([\s\S]*?function completeLevel/)?.[0] || "";
   const restartSource = game.match(/function restartStage\(\)[\s\S]*?\n}/)?.[0] || "";
   const startLevelSource = game.match(/function startLevel\([\s\S]*?function resetLoop/)?.[0] || "";
   assert((gameMenuSource.match(/class="game-menu-option(?:\s[^"]*)?"/g) || []).length === 3, "In-game menu must expose exactly three secondary options");
   assert((caughtSource.match(/<button/g) || []).length === 1 && caughtSource.includes('id="caughtRestartAction"'), "Caught dialog must expose only one restart button");
+  assert(game.includes("function ensureGlobalOverlay()") && catchPlayerSource.indexOf("showCaughtOverlay(reasonKey)") < catchPlayerSource.indexOf('sound("caught")'), "Critical caught dialog is not mounted globally before optional audio runs");
   assert(restartSource.includes("startLevel(levelIndex, { retryPenalty, countPlay: false })") && !game.includes("undoLastEcho") && !game.includes("KeyU"), "Fresh restart or clone-delete removal is incomplete");
   assert(startLevelSource.includes("echoes = []") && startLevelSource.includes("collectedItemIds = new Set()") && startLevelSource.includes("keyCollected = false") && startLevelSource.includes("itemBonusScore = 0"), "Fresh restart does not clear clones, key, and items");
   assert(profileUtils.includes("export const PROFILE_COLORS") && profileUtils.includes("export function getWorldLeaderboard"), "Profile and leaderboard utility exports are missing");

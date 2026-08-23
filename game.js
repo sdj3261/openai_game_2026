@@ -1,4 +1,4 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.13.0";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.14.0";
 import {
   DEFAULT_PROFILE,
   LEGACY_DEFAULT_PROFILE_NAME,
@@ -13,8 +13,8 @@ import {
   normalizeProfileName,
   prepareStoredProfile,
   serializeStoredProfile,
-} from "./profile-utils.js?v=0.13.0";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.13.0";
+} from "./profile-utils.js?v=0.14.0";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.14.0";
 import {
   MAX_CLONES,
   canCollectTeamKey,
@@ -23,9 +23,9 @@ import {
   stageNineBlackoutOpacity,
   stageNineEventShakeIntensity,
   stageNineShakeOffset,
-} from "./game-rules.js?v=0.13.0";
-import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.13.0";
-import { placeCanvasLabel, rectFullyInsideBounds } from "./label-layout.js?v=0.13.0";
+} from "./game-rules.js?v=0.14.0";
+import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.14.0";
+import { placeCanvasLabel, rectFullyInsideBounds } from "./label-layout.js?v=0.14.0";
 import {
   PROJECTILE_PROFILES,
   createProjectileLaunch,
@@ -33,7 +33,7 @@ import {
   projectileElapsedMs,
   projectileFlightPosition,
   shouldRemoveProjectile,
-} from "./projectile-utils.js?v=0.13.0";
+} from "./projectile-utils.js?v=0.14.0";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -543,25 +543,35 @@ function normalizeAngle(angle) {
 function initAudio() {
   const AudioCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtor) return;
-  if (!audioContext) audioContext = new AudioCtor();
-  if (audioContext.state === "suspended") void audioContext.resume().catch(() => {});
+  try {
+    if (!audioContext) audioContext = new AudioCtor();
+    if (audioContext.state === "suspended") void audioContext.resume().catch(() => {});
+  } catch {
+    // Audio is optional. A blocked or interrupted mobile audio context must
+    // never stop gameplay or prevent a critical dialog from opening.
+    audioContext = null;
+  }
 }
 
 function tone(frequency, duration = 0.08, type = "sine", volume = 0.035, delay = 0) {
   if (muted || !audioContext) return;
-  const start = audioContext.currentTime + delay;
-  const attackEnd = start + Math.min(0.006, duration * 0.2);
-  const end = start + duration;
-  const oscillator = audioContext.createOscillator();
-  const gain = audioContext.createGain();
-  oscillator.type = type;
-  oscillator.frequency.setValueAtTime(frequency, start);
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), attackEnd);
-  gain.gain.exponentialRampToValueAtTime(0.0001, end);
-  oscillator.connect(gain).connect(audioContext.destination);
-  oscillator.start(start);
-  oscillator.stop(end + 0.01);
+  try {
+    const start = audioContext.currentTime + delay;
+    const attackEnd = start + Math.min(0.006, duration * 0.2);
+    const end = start + duration;
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), attackEnd);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
+    oscillator.connect(gain).connect(audioContext.destination);
+    oscillator.start(start);
+    oscillator.stop(end + 0.01);
+  } catch {
+    audioContext = null;
+  }
 }
 
 function sound(name) {
@@ -674,7 +684,12 @@ function showToast(message, duration = 1800) {
   toastTimer = setTimeout(() => ui.toast.classList.remove("show"), duration);
 }
 
+function ensureGlobalOverlay() {
+  if (ui.overlay.parentElement !== document.body) document.body.append(ui.overlay);
+}
+
 function setOverlay(html, view) {
+  ensureGlobalOverlay();
   ui.overlay.innerHTML = html;
   ui.overlay.dataset.view = view;
   ui.overlay.scrollTop = 0;
@@ -993,9 +1008,9 @@ function showMenu(selectedIndex = null) {
       <div class="arcade-stage-card toy-stage-card" data-stage="${level.code}" data-theme="${level.theme.id}">
         <div class="arcade-stage-info">
           <div class="stage-heading">
-            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.13.0" alt="" aria-hidden="true"></span>
+            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.14.0" alt="" aria-hidden="true"></span>
             <div class="stage-heading__copy"><span class="arcade-rule">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length}</span><h2 class="stage-title"><span class="stage-title__local">${escapeHtml(stageCopy.title)}</span></h2><p class="stage-summary">${escapeHtml(stageCopy.rule)}</p></div>
-            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.13.0" alt="" aria-hidden="true"></span>` : ""}
+            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.14.0" alt="" aria-hidden="true"></span>` : ""}
           </div>
           <div class="stage-mission"><span>${t(settings.language, "currentGoal")}</span><b>${escapeHtml(stageCopy.cue)}</b></div>
           <div class="arcade-stats"><span>${t(settings.language, "difficulty")} ${level.difficulty}/${levels.length}</span><span>${t(settings.language, "best")} ${best ? formatRecordScore(best) : "--"}</span></div>
@@ -1836,10 +1851,18 @@ function catchPlayer(reasonKey = "caught") {
   gameStats.catches += 1;
   runRetries += 1;
   saveStats();
-  sound("caught");
-  showSoundCaption(reasonKey, player);
+  gameMenuReturnState = null;
+  setGameMenuExpanded(false);
+  // Critical UI comes first. Sound is optional and may be unavailable on
+  // interrupted mobile audio contexts.
   showCaughtOverlay(reasonKey);
   updateHud();
+  try {
+    sound("caught");
+    showSoundCaption(reasonKey, player);
+  } catch {
+    // The retry dialog is already usable; optional feedback cannot break it.
+  }
 }
 
 function completeLevel() {
