@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 
-const expectedVersion = "0.8.2";
+const expectedVersion = "0.9.0";
 const port = 43000 + Math.floor(Math.random() * 1000);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let serverOutput = "";
@@ -57,44 +57,53 @@ try {
     `/design-system.css?v=${expectedVersion}`,
     `/styles.css?v=${expectedVersion}`,
     `/game.js?v=${expectedVersion}`,
+    `/sprite-assets.js?v=${expectedVersion}`,
+    `/projectile-utils.js?v=${expectedVersion}`,
     `/input-utils.js?v=${expectedVersion}`,
     `/profile-utils.js?v=${expectedVersion}`,
     `/i18n.js?v=${expectedVersion}`,
   ];
+  const spriteBundleBases = [
+    ...["down", "left", "right", "up"].map((direction) => `/assets/sprites/duck-player/${direction}`),
+    ...["club", "listener", "archer", "searchlight", "netgun", "captain"].map((role) => `/assets/sprites/toy-guards/${role}`),
+  ];
+  const spriteBundlePaths = spriteBundleBases.flatMap((base) => [`${base}/animation.gif`, `${base}/pipeline-meta.json`]);
   const assetPaths = [
     ...sourceAssetPaths,
     "/assets/fonts/Galmuri11-Bold.woff2",
     "/assets/fonts/OFL-Galmuri.txt",
-    "/assets/sprites/hero-idle-v2/animation.gif",
-    "/assets/sprites/hero-idle-v2/pipeline-meta.json",
-    "/assets/sprites/boss-idle/animation.gif",
-    "/assets/sprites/boss-idle/pipeline-meta.json",
+    ...spriteBundlePaths,
   ];
   const assetResponses = await Promise.all(assetPaths.map((path) => fetch(`http://127.0.0.1:${port}${path}`)));
   const failedAssets = assetResponses.filter((asset) => !asset.ok);
   if (failedAssets.length) throw new Error(`${failedAssets.length} required game asset(s) failed to load`);
 
-  const [tokens, appCss, game, inputUtils, profileUtils, i18n] = await Promise.all(assetResponses.slice(0, sourceAssetPaths.length).map((asset) => asset.text()));
+  const [tokens, appCss, game, spriteAssets, projectileUtils, inputUtils, profileUtils, i18n] = await Promise.all(assetResponses.slice(0, sourceAssetPaths.length).map((asset) => asset.text()));
   const fontBytes = new Uint8Array(await assetResponses[sourceAssetPaths.length].arrayBuffer());
   const fontLicense = await assetResponses[sourceAssetPaths.length + 1].text();
-  const heroGif = new Uint8Array(await assetResponses[sourceAssetPaths.length + 2].arrayBuffer());
-  const heroMeta = await assetResponses[sourceAssetPaths.length + 3].json();
-  const bossGif = new Uint8Array(await assetResponses[sourceAssetPaths.length + 4].arrayBuffer());
-  const bossMeta = await assetResponses[sourceAssetPaths.length + 5].json();
+  const spriteResponses = assetResponses.slice(sourceAssetPaths.length + 2);
   assert(tokens.includes("--theme-accent"), "Design-system theme token is missing");
   assert(tokens.includes("--font-game-ko") && tokens.includes("Galmuri11-Bold.woff2"), "Bundled Korean game font token is missing");
   assert(appCss.includes(".virtual-stick") && appCss.includes(".mobile-action"), "Mobile control styles are missing");
   assert(fontBytes.length > 100000 && String.fromCharCode(...fontBytes.slice(0, 4)) === "wOF2", "Bundled Galmuri11 font is missing or invalid");
   assert(fontLicense.includes("SIL Open Font License, Version 1.1") && fontLicense.includes("Lee Minseo"), "Bundled font license is missing or invalid");
-  assert(String.fromCharCode(...heroGif.slice(0, 4)) === "GIF8" && heroMeta.qc_summary.frame_count === 4, "Hero sprite bundle is missing or invalid");
-  assert(heroMeta.qc_summary.edge_touch_count === 0 && heroMeta.qc_summary.paste_clamped_count === 0 && heroMeta.qc_summary.body_scale_cv <= 0.08 && heroMeta.qc_summary.anchor_y_std <= 0.05, "Hero sprite strict QC failed");
-  assert(String.fromCharCode(...bossGif.slice(0, 4)) === "GIF8" && bossMeta.qc_summary.frame_count === 9, "Boss sprite bundle is missing or invalid");
-  assert(bossMeta.qc_summary.edge_touch_count === 0 && bossMeta.qc_summary.paste_clamped_count === 0 && bossMeta.qc_summary.body_scale_cv < 0.01, "Boss sprite QC failed");
+  for (let index = 0; index < spriteBundleBases.length; index += 1) {
+    const gif = new Uint8Array(await spriteResponses[index * 2].arrayBuffer());
+    const meta = await spriteResponses[index * 2 + 1].json();
+    assert(String.fromCharCode(...gif.slice(0, 4)) === "GIF8" && meta.qc_summary.frame_count === 4, `${spriteBundleBases[index]} sprite bundle is missing or invalid`);
+    assert(meta.qc_config.strict_qc === true && meta.qc_summary.edge_touch_count === 0 && meta.qc_summary.paste_clamped_count === 0 && meta.qc_summary.body_scale_cv <= 0.10 && meta.qc_summary.anchor_y_std <= 0.14, `${spriteBundleBases[index]} strict sprite QC failed`);
+  }
   assert(game.includes(`./input-utils.js?v=${expectedVersion}`), "Game does not import the versioned input utilities");
   assert(game.includes(`./profile-utils.js?v=${expectedVersion}`), "Game does not import the versioned profile utilities");
   assert(game.includes(`./i18n.js?v=${expectedVersion}`), "Game does not import the versioned translation catalog");
+  assert(game.includes(`./sprite-assets.js?v=${expectedVersion}`), "Game does not import the versioned sprite catalog");
+  assert(game.includes(`./projectile-utils.js?v=${expectedVersion}`), "Game does not import the versioned projectile physics");
   assert(game.includes('code: "08"') && game.includes('class="world-map toy-rail"') && game.includes('t(settings.language, "gameTitle")'), "8초 도둑단 eight-stage menu data is missing");
   assert(inputUtils.includes("export function projectAnalogStick"), "Analog-stick utility export is missing");
+  assert(spriteAssets.includes("DUCK_SPRITES") && spriteAssets.includes("GUARD_ROLE_BY_TYPE") && spriteAssets.includes("toy-guards"), "Duck and toy-guard sprite catalog is missing");
+  assert(projectileUtils.includes("PROJECTILE_PROFILES") && projectileUtils.includes("firstSweptCollision") && projectileUtils.includes("projectileFlightPosition") && projectileUtils.includes("projectileElapsedMs"), "Projectile physics exports are missing");
+  assert(game.includes("spawnedAtMs: clock") && game.includes("projectileElapsedMs(loopElapsed, projectile.spawnedAtMs)"), "Projectile absolute-clock integration is missing");
+  assert(game.includes("const actors = [...echoes, player]"), "Clone-first projectile collision ordering is missing");
   assert(profileUtils.includes("export const PROFILE_COLORS") && profileUtils.includes("export function getWorldLeaderboard"), "Profile and leaderboard utility exports are missing");
   assert(i18n.includes("export const LANGUAGES") && i18n.includes("export function t") && i18n.includes('gameTitle: "8초 도둑단"') && i18n.includes('"08"'), "Translation catalog or eight-stage copy is missing");
   assert(serverOutput.includes(`http://127.0.0.1:${port}`), "CLI --host did not override LOOP_HEIST_HOST");

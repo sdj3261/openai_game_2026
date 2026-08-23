@@ -10,6 +10,8 @@ const CORE_KEYS = [
   "noRecord", "clear", "caught", "doorOpen", "guardHeard", "bossAlert", "gemGet", "exit",
   "stage", "now", "next", "score", "grade", "radarHits", "retries", "echoFull",
   "saveWithX", "echoSaved", "needEcho", "needNoiseEcho", "timeBonus", "timeBonusSound",
+  "doorTutorial", "echoPlate", "doorLockedLabel", "doorOpenLabel",
+  "arrowShot", "netShot", "arrowHit", "netHit",
 ];
 
 test("LANGUAGES exposes immutable Korean, English, and Japanese options", () => {
@@ -38,6 +40,12 @@ test("all core keys have short translations in every supported language", () => 
   assert.equal(t("ko", "visualSoundHelp"), "효과음을 화면에 표시");
   assert.equal(t("en", "guardHeard"), "Guard heard it!");
   assert.equal(t("ja", "bossAlert"), "ボス警戒！");
+  assert.match(t("ko", "doorTutorial"), /발판.*X 저장.*다음 루프.*문/);
+  assert.match(t("en", "doorTutorial"), /switch.*X.*next loop.*door/i);
+  assert.match(t("ja", "doorTutorial"), /スイッチ.*X保存.*次のループ.*ドア/);
+  assert.equal(t("ko", "doorLockedLabel", { value: 2 }), "문 2 · 잠김");
+  assert.equal(t("en", "doorOpenLabel", { value: 1 }), "Door 1 · Open");
+  assert.equal(t("ja", "echoPlate", { value: 1 }), "スイッチ 1 · X保存");
 });
 
 test("stages 01 through 08 provide title, cue, and rule in all languages", () => {
@@ -63,7 +71,7 @@ test("t falls back to Korean for unsupported languages and to the key when missi
 
 test("t replaces named params safely and preserves placeholders without a value", () => {
   assert.equal(t("ko", "recordSummary", { time: "6.2", echoes: 2 }), "6.2초 · 분신 ×2");
-  assert.equal(t("en", "recordSummary", { time: "$&", echoes: 1 }), "$&s · ECHO ×1");
-  assert.equal(t("ja", "recordSummary", { time: 7 }), "7秒 · エコー×{echoes}");
+  assert.equal(t("en", "recordSummary", { time: "$&", echoes: 1 }), "$&s · CLONE ×1");
+  assert.equal(t("ja", "recordSummary", { time: 7 }), "7秒 · 分身×{echoes}");
   assert.equal(t("ko", "recordSummary", null), "{time}초 · 분신 ×{echoes}");
 });
