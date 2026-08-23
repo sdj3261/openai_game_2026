@@ -15,6 +15,11 @@ body {
 
 body.dialog-open { overflow: hidden; }
 
+/* Dialogs are document-level UI. Keep the game inert while the global layer
+   is open so no canvas, touch control, or stacking context can intercept it. */
+body.dialog-open > .game-shell { pointer-events: none; }
+body.dialog-open > .overlay.visible { pointer-events: auto; }
+
 /* The canvas creates its own stacking context. Hide gameplay controls while a
    full-screen menu/dialog is open so they can never paint above that dialog. */
 body.dialog-open .mobile-gamepad {
@@ -301,7 +306,7 @@ body[data-visual-sound="false"] .sound-caption { display: none; }
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 10000;
   display: none;
   overflow: auto;
   overscroll-behavior: contain;
@@ -316,6 +321,13 @@ body[data-visual-sound="false"] .sound-caption { display: none; }
     radial-gradient(circle at 90% 22%, rgb(255 255 255 / 0.75) 0 52px, transparent 53px),
     radial-gradient(circle at 72% 92%, rgb(98 217 173 / 0.28) 0 95px, transparent 96px),
     linear-gradient(180deg, var(--toy-sky) 0 58%, var(--toy-sky-soft) 100%);
+}
+
+body > .overlay {
+  width: 100vw;
+  min-width: 100vw;
+  min-height: 100dvh;
+  isolation: isolate;
 }
 
 .overlay::before,
@@ -3121,12 +3133,16 @@ kbd {
 .caught-dialog h2 { margin: 0; color: #a41530; font-size: clamp(1.8rem, 8vw, 2.8rem); }
 .caught-dialog p { margin: 0; font-size: 0.8rem; font-weight: 900; }
 .caught-dialog__restart {
+  position: relative;
+  z-index: 1;
   width: 100%;
   min-height: 58px;
   margin-top: 4px;
   color: #ffffff;
   border-color: #6f1025;
   background: #dc3348;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 @media (max-width: 900px), (pointer: coarse) {

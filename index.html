@@ -6,13 +6,13 @@
     <meta name="theme-color" content="#72d9ff" />
     <meta name="description" content="8초 안에 열쇠를 찾아 잠긴 출구로 탈출하는 분신 협동 게임" />
     <title>8초 도둑단</title>
-    <link rel="icon" href="./favicon.ico?v=0.13.0" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/favicon-32.png?v=0.13.0" />
-    <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/favicon-16.png?v=0.13.0" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=0.13.0" />
-    <link rel="manifest" href="./site.webmanifest?v=0.13.0" />
-    <link rel="stylesheet" href="./design-system.css?v=0.13.0" />
-    <link rel="stylesheet" href="./styles.css?v=0.13.0" />
+    <link rel="icon" href="./favicon.ico?v=0.14.0" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/favicon-32.png?v=0.14.0" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/favicon-16.png?v=0.14.0" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=0.14.0" />
+    <link rel="manifest" href="./site.webmanifest?v=0.14.0" />
+    <link rel="stylesheet" href="./design-system.css?v=0.14.0" />
+    <link rel="stylesheet" href="./styles.css?v=0.14.0" />
   </head>
   <body>
     <a class="skip-link" href="#game">게임 화면으로 바로가기</a>
@@ -45,7 +45,6 @@
 
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
         <div class="sound-caption" id="soundCaption" role="status" aria-live="polite" aria-atomic="true"></div>
-        <div class="overlay visible" id="overlay" role="dialog" aria-modal="true" aria-hidden="false" aria-labelledby="overlayTitle"></div>
       </section>
 
       <section class="mobile-gamepad ds-surface" aria-label="모바일 게임 조작">
@@ -73,6 +72,10 @@
       </footer>
     </main>
 
-    <script type="module" src="./game.js?v=0.13.0"></script>
+    <!-- Dialogs live at the document root so canvas clipping and stacking
+         contexts can never hide them on mobile or desktop browsers. -->
+    <div class="overlay visible" id="overlay" role="dialog" aria-modal="true" aria-hidden="false" aria-labelledby="overlayTitle"></div>
+
+    <script type="module" src="./game.js?v=0.14.0"></script>
   </body>
 </html>
