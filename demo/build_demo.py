@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import shutil
 import subprocess
 import sys
 import wave
@@ -283,7 +284,7 @@ def draw_purpose_graphic(canvas: Image.Image, draw: ImageDraw.ImageDraw, scene_i
         draw.text((930, 175), "8.0", font=FONT_HUGE, fill=yellow, stroke_width=3, stroke_fill=(8, 19, 33))
         draw.text((982, 294), "SECONDS", font=FONT_SMALL, fill=(255, 255, 255))
     elif scene_id == "play":
-        for index, (key, label) in enumerate((("Z", "미끼"), ("X", "분신 저장"))):
+        for index, (key, label) in enumerate((("Z", "경비원 도발"), ("X", "분신 만들기"))):
             x = 940 + index * 135
             rounded(draw, (x, 190, x + 100, 290), 18, (9, 19, 33, 235), yellow, 3)
             draw.text((x + 31, 203), key, font=font(42, True), fill=yellow)
@@ -534,8 +535,10 @@ def main() -> None:
     audio_path = WORK / "demo-mix.wav"
     write_wav(audio_path, audio)
     write_poster(scenes, schedule, spans, total)
-    ffmpeg_default = Path("C:/Users/tlseh/AppData/Local/Temp/eight-second-demo-tools/node_modules/ffmpeg-static/ffmpeg.exe")
-    ffmpeg = Path(os.environ.get("FFMPEG_PATH", ffmpeg_default))
+    ffmpeg_value = os.environ.get("FFMPEG_PATH") or shutil.which("ffmpeg")
+    if not ffmpeg_value:
+        raise FileNotFoundError("FFMPEG_PATH를 설정하거나 ffmpeg를 PATH에 추가해 주세요.")
+    ffmpeg = Path(ffmpeg_value)
     if not ffmpeg.exists():
         raise FileNotFoundError(f"ffmpeg를 찾을 수 없습니다: {ffmpeg}")
     encode_video(ffmpeg, scenes, schedule, spans, total, audio_path)

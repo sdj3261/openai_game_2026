@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 
-const expectedVersion = "0.9.0";
+const expectedVersion = "0.10.0";
 const port = 43000 + Math.floor(Math.random() * 1000);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let serverOutput = "";
@@ -49,6 +49,8 @@ try {
     'data-game-action="save"',
     'aria-keyshortcuts="Z"',
     'aria-keyshortcuts="X"',
+    "경비원 도발",
+    "분신 만들기",
   ];
   const missingHtml = requiredHtml.filter((value) => !html.includes(value));
   if (missingHtml.length) throw new Error(`Served HTML is missing: ${missingHtml.join(", ")}`);
@@ -57,6 +59,7 @@ try {
     `/design-system.css?v=${expectedVersion}`,
     `/styles.css?v=${expectedVersion}`,
     `/game.js?v=${expectedVersion}`,
+    `/game-rules.js?v=${expectedVersion}`,
     `/sprite-assets.js?v=${expectedVersion}`,
     `/projectile-utils.js?v=${expectedVersion}`,
     `/input-utils.js?v=${expectedVersion}`,
@@ -78,13 +81,13 @@ try {
   const failedAssets = assetResponses.filter((asset) => !asset.ok);
   if (failedAssets.length) throw new Error(`${failedAssets.length} required game asset(s) failed to load`);
 
-  const [tokens, appCss, game, spriteAssets, projectileUtils, inputUtils, profileUtils, i18n] = await Promise.all(assetResponses.slice(0, sourceAssetPaths.length).map((asset) => asset.text()));
+  const [tokens, appCss, game, gameRules, spriteAssets, projectileUtils, inputUtils, profileUtils, i18n] = await Promise.all(assetResponses.slice(0, sourceAssetPaths.length).map((asset) => asset.text()));
   const fontBytes = new Uint8Array(await assetResponses[sourceAssetPaths.length].arrayBuffer());
   const fontLicense = await assetResponses[sourceAssetPaths.length + 1].text();
   const spriteResponses = assetResponses.slice(sourceAssetPaths.length + 2);
   assert(tokens.includes("--theme-accent"), "Design-system theme token is missing");
   assert(tokens.includes("--font-game-ko") && tokens.includes("Galmuri11-Bold.woff2"), "Bundled Korean game font token is missing");
-  assert(appCss.includes(".virtual-stick") && appCss.includes(".mobile-action"), "Mobile control styles are missing");
+  assert(appCss.includes(".virtual-stick") && appCss.includes(".mobile-action") && appCss.includes(".game-guide"), "Mobile control or settings-guide styles are missing");
   assert(fontBytes.length > 100000 && String.fromCharCode(...fontBytes.slice(0, 4)) === "wOF2", "Bundled Galmuri11 font is missing or invalid");
   assert(fontLicense.includes("SIL Open Font License, Version 1.1") && fontLicense.includes("Lee Minseo"), "Bundled font license is missing or invalid");
   for (let index = 0; index < spriteBundleBases.length; index += 1) {
@@ -94,18 +97,21 @@ try {
     assert(meta.qc_config.strict_qc === true && meta.qc_summary.edge_touch_count === 0 && meta.qc_summary.paste_clamped_count === 0 && meta.qc_summary.body_scale_cv <= 0.10 && meta.qc_summary.anchor_y_std <= 0.14, `${spriteBundleBases[index]} strict sprite QC failed`);
   }
   assert(game.includes(`./input-utils.js?v=${expectedVersion}`), "Game does not import the versioned input utilities");
+  assert(game.includes(`./game-rules.js?v=${expectedVersion}`), "Game does not import the versioned key-and-clone rules");
   assert(game.includes(`./profile-utils.js?v=${expectedVersion}`), "Game does not import the versioned profile utilities");
   assert(game.includes(`./i18n.js?v=${expectedVersion}`), "Game does not import the versioned translation catalog");
   assert(game.includes(`./sprite-assets.js?v=${expectedVersion}`), "Game does not import the versioned sprite catalog");
   assert(game.includes(`./projectile-utils.js?v=${expectedVersion}`), "Game does not import the versioned projectile physics");
   assert(game.includes('code: "08"') && game.includes('class="world-map toy-rail"') && game.includes('t(settings.language, "gameTitle")'), "8초 도둑단 eight-stage menu data is missing");
   assert(inputUtils.includes("export function projectAnalogStick"), "Analog-stick utility export is missing");
-  assert(spriteAssets.includes("DUCK_SPRITES") && spriteAssets.includes("GUARD_ROLE_BY_TYPE") && spriteAssets.includes("toy-guards"), "Duck and toy-guard sprite catalog is missing");
+  assert(spriteAssets.includes(`ASSET_VERSION = "${expectedVersion}"`) && spriteAssets.includes("DUCK_SPRITES") && spriteAssets.includes("GUARD_ROLE_BY_TYPE") && spriteAssets.includes("toy-guards"), "Versioned duck and toy-guard sprite catalog is missing");
   assert(projectileUtils.includes("PROJECTILE_PROFILES") && projectileUtils.includes("firstSweptCollision") && projectileUtils.includes("projectileFlightPosition") && projectileUtils.includes("projectileElapsedMs"), "Projectile physics exports are missing");
+  assert(gameRules.includes("MAX_CLONES = 10") && gameRules.includes("export function canEscape") && gameRules.includes("candidate.hasKey === true"), "Key-only exit or ten-clone rule is missing");
   assert(game.includes("spawnedAtMs: clock") && game.includes("projectileElapsedMs(loopElapsed, projectile.spawnedAtMs)"), "Projectile absolute-clock integration is missing");
   assert(game.includes("const actors = [...echoes, player]"), "Clone-first projectile collision ordering is missing");
+  assert(game.includes("if (canEscape({ hasKey: player.hasKey })) completeLevel();") && !game.includes("requiredNoiseEchoes") && !game.includes("requiredEchoes"), "Exit still has a hidden clone or noise requirement");
   assert(profileUtils.includes("export const PROFILE_COLORS") && profileUtils.includes("export function getWorldLeaderboard"), "Profile and leaderboard utility exports are missing");
-  assert(i18n.includes("export const LANGUAGES") && i18n.includes("export function t") && i18n.includes('gameTitle: "8초 도둑단"') && i18n.includes('"08"'), "Translation catalog or eight-stage copy is missing");
+  assert(i18n.includes("export const LANGUAGES") && i18n.includes("export function t") && i18n.includes('gameTitle: "8초 도둑단"') && i18n.includes('guide: "게임 방법"') && i18n.includes('needKey: "먼저 열쇠를 찾으세요!"') && i18n.includes('"08"'), "Translation catalog, guide, or eight-stage copy is missing");
   assert(serverOutput.includes(`http://127.0.0.1:${port}`), "CLI --host did not override LOOP_HEIST_HOST");
 
   const [faviconResponse, faviconPngResponse, appleIconResponse, manifestResponse] = await Promise.all([

@@ -1,7 +1,7 @@
 {
   "name": "8초 도둑단",
   "short_name": "8초 도둑단",
-  "description": "8초 전의 분신과 함께 보석을 훔치는 타임루프 잠입 게임",
+  "description": "8초 안에 열쇠를 찾아 출구를 여는 분신 협동 잠입 게임",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",

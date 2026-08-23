@@ -80,10 +80,10 @@ test("calculateStealthScore applies every penalty using the documented formula",
 
   assert.equal(result.breakdown.radarPenalty, 1200);
   assert.equal(result.breakdown.retryPenalty, 1300);
-  assert.equal(result.breakdown.echoPenalty, 750);
+  assert.equal(result.breakdown.echoPenalty, 1000);
   assert.equal(result.breakdown.timePenalty, 178);
-  assert.equal(result.breakdown.totalPenalty, 3428);
-  assert.equal(result.score, 6572);
+  assert.equal(result.breakdown.totalPenalty, 3678);
+  assert.equal(result.score, 6322);
   assert.equal(result.grade, "B");
 });
 
@@ -99,9 +99,17 @@ test("calculateStealthScore only penalizes echoes beyond the stage target", () =
   assert.equal(extra.score, 9500);
 });
 
+test("calculateStealthScore increasingly penalizes brute-force clone use up to ten", () => {
+  const result = calculateStealthScore({ echoes: 10, targetEchoes: 3, time: 5000 });
+  assert.equal(result.breakdown.extraEchoes, 7);
+  assert.equal(result.breakdown.echoPenalty, 3000);
+  assert.equal(result.score, 7000);
+  assert.equal(result.grade, "B");
+});
+
 test("calculateStealthScore uses inclusive grade thresholds and clamps at zero", () => {
   assert.deepEqual(
-    [4, 10, 16, 17].map((echoes) => {
+    [3, 6, 9, 10].map((echoes) => {
       const { score, grade } = calculateStealthScore({ echoes, time: 5000 });
       return { score, grade };
     }),
@@ -109,7 +117,7 @@ test("calculateStealthScore uses inclusive grade thresholds and clamps at zero",
       { score: 9000, grade: "S" },
       { score: 7500, grade: "A" },
       { score: 6000, grade: "B" },
-      { score: 5750, grade: "C" },
+      { score: 5500, grade: "C" },
     ],
   );
 
