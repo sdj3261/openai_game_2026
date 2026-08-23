@@ -44,18 +44,18 @@ test("all core keys have short translations in every supported language", () => 
   assert.match(t("ko", "doorTutorial"), /발판.*X.*다음 차례.*문/);
   assert.match(t("en", "doorTutorial"), /X.*switch.*door.*next round/i);
   assert.match(t("ja", "doorTutorial"), /スイッチ.*X.*次の回.*ドア/);
-  assert.equal(t("ko", "doorLockedLabel", { value: 2 }), "문 2 · 닫힘");
-  assert.equal(t("en", "doorOpenLabel", { value: 1 }), "Door 1 · Open");
-  assert.equal(t("ja", "echoPlate", { value: 1 }), "スイッチ 1 · ここでX");
+  assert.equal(t("ko", "doorLockedLabel", { value: 2 }), "문 2 닫힘");
+  assert.equal(t("en", "doorOpenLabel", { value: 1 }), "Door 1 open");
+  assert.equal(t("ja", "echoPlate", { value: 1 }), "スイッチ 1、ここでX");
   assert.equal(t("ko", "needKey"), "먼저 열쇠를 찾으세요!");
-  assert.equal(t("ko", "guideScore", { value: 2 }), "이 스테이지 권장 2개 · 최대 10개. 더 쓰면 점수가 깎여요.");
+  assert.equal(t("ko", "guideScore", { value: 2 }), "이 스테이지에는 분신 2개가 필요해요. 최대 10개이며 더 쓰면 점수가 깎여요.");
   assert.equal(t("en", "gem"), "KEY");
   assert.equal(t("ja", "escapeNow"), "出口オープン");
 });
 
-test("stages 01 through 08 provide title, cue, and rule in all languages", () => {
+test("stages 01 through 09 provide title, cue, and rule in all languages", () => {
   for (const { code } of LANGUAGES) {
-    for (let index = 1; index <= 8; index += 1) {
+    for (let index = 1; index <= 9; index += 1) {
       const stage = String(index).padStart(2, "0");
       for (const field of ["title", "cue", "rule"]) {
         const key = `stage.${stage}.${field}`;
@@ -66,6 +66,9 @@ test("stages 01 through 08 provide title, cue, and rule in all languages", () =>
   assert.equal(t("ko", "stage.01.title"), "태엽 박물관");
   assert.equal(t("en", "stage.08.title"), "Midnight Clocktower");
   assert.equal(t("ja", "stage.07.title"), "王室金庫");
+  assert.equal(t("ko", "stage.09.title"), "불타는 지옥 성채");
+  assert.equal(t("ko", "stage.02.cue"), "발판에서 X로 분신을 만든 뒤 열린 문 너머의 열쇠를 찾으세요");
+  assert.equal(t("ko", "stage.09.cue"), "분신 3개로 문 3개를 열고 지옥불 열쇠를 찾아 탈출하세요");
 });
 
 test("t falls back to Korean for unsupported languages and to the key when missing", () => {
@@ -75,8 +78,8 @@ test("t falls back to Korean for unsupported languages and to the key when missi
 });
 
 test("t replaces named params safely and preserves placeholders without a value", () => {
-  assert.equal(t("ko", "recordSummary", { time: "6.2", echoes: 2 }), "6.2초 · 분신 2");
-  assert.equal(t("en", "recordSummary", { time: "$&", echoes: 1 }), "$&s · CLONE ×1");
-  assert.equal(t("ja", "recordSummary", { time: 7 }), "7秒 · 分身×{echoes}");
-  assert.equal(t("ko", "recordSummary", null), "{time}초 · 분신 {echoes}");
+  assert.equal(t("ko", "recordSummary", { time: "6.2", echoes: 2 }), "6.2초, 분신 2");
+  assert.equal(t("en", "recordSummary", { time: "$&", echoes: 1 }), "$&s, CLONE ×1");
+  assert.equal(t("ja", "recordSummary", { time: 7 }), "7秒、分身×{echoes}");
+  assert.equal(t("ko", "recordSummary", null), "{time}초, 분신 {echoes}");
 });

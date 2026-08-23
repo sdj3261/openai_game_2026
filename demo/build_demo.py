@@ -28,10 +28,10 @@ TTS = WORK / "tts"
 WIDTH, HEIGHT = 1280, 720
 FPS = 12
 SAMPLE_RATE = 48_000
-CAPTION_GAP = 0.38
-SCENE_GAP = 0.82
-START_PAD = 1.15
-END_PAD = 2.25
+CAPTION_GAP = 0.25
+SCENE_GAP = 0.55
+START_PAD = 1.0
+END_PAD = 1.8
 
 
 @lru_cache(maxsize=64)
@@ -319,7 +319,7 @@ def draw_purpose_graphic(canvas: Image.Image, draw: ImageDraw.ImageDraw, scene_i
         draw.line(net_points, fill=(53, 207, 242), width=6)
         draw.text((900, 185), "ARROW 520", font=font(20, True), fill=(255, 159, 67))
         draw.text((900, 220), "NET 340", font=font(20, True), fill=(53, 207, 242))
-        draw.text((1105, 300), "높은 궤도", font=font(16, True), fill=(255, 255, 255))
+        draw.text((1105, 300), "높게 날아감", font=font(16, True), fill=(255, 255, 255))
     elif scene_id == "boss":
         rounded(draw, (900, 170, 1190, 325), 28, (65, 12, 38, 225), red, 4)
         draw.text((920, 192), "CAPTAIN", font=font(48, True), fill=red)
@@ -362,20 +362,50 @@ def active_caption(schedule: list[dict], time_value: float, scene_index: int) ->
 
 
 CAPTURE_CACHE: dict[str, Image.Image] = {}
+CAPTURE_SEQUENCE_CACHE: dict[str, list[Path]] = {}
 
 
-def load_capture(name: str) -> Image.Image:
+def load_capture(name: str, progress: float = 0.0) -> Image.Image:
+    path = CAPTURES / name
+    if path.is_dir():
+        if name not in CAPTURE_SEQUENCE_CACHE:
+            CAPTURE_SEQUENCE_CACHE[name] = sorted(path.glob("frame-*.png"))
+        frames = CAPTURE_SEQUENCE_CACHE[name]
+        if not frames:
+            raise FileNotFoundError(f"게임 캡처 프레임이 없습니다: {path}")
+        index = min(len(frames) - 1, max(0, int(progress * len(frames))))
+        cache_key = str(frames[index])
+        if cache_key not in CAPTURE_CACHE:
+            CAPTURE_CACHE[cache_key] = Image.open(frames[index]).convert("RGB")
+        return CAPTURE_CACHE[cache_key]
     if name in CAPTURE_CACHE:
         return CAPTURE_CACHE[name]
-    path = CAPTURES / name
     if not path.exists():
-        blank = Image.new("RGB", (WIDTH, HEIGHT), (16, 33, 54))
-        draw = ImageDraw.Draw(blank)
-        draw.text((70, 590), f"GAME CAPTURE · {name}", font=FONT_SMALL, fill=(98, 247, 209))
-        CAPTURE_CACHE[name] = blank
-        return blank
+        raise FileNotFoundError(f"게임 캡처가 없습니다: {path}")
     CAPTURE_CACHE[name] = Image.open(path).convert("RGB")
     return CAPTURE_CACHE[name]
+
+
+def present_capture(image: Image.Image, progress: float, direction: int) -> Image.Image:
+    ratio = image.width / max(1, image.height)
+    target_ratio = WIDTH / HEIGHT
+    if abs(ratio - target_ratio) < 0.03:
+        return image.resize((WIDTH, HEIGHT), Image.Resampling.LANCZOS)
+    if ratio < 1.0:
+        background = cover(image, progress, direction).filter(ImageFilter.GaussianBlur(16))
+        shade = Image.new("RGBA", (WIDTH, HEIGHT), (3, 10, 19, 148))
+        canvas = Image.alpha_composite(background.convert("RGBA"), shade)
+        available_height = HEIGHT - 32
+        scale = min(available_height / image.height, 430 / image.width)
+        size = (round(image.width * scale), round(image.height * scale))
+        mobile = image.resize(size, Image.Resampling.LANCZOS)
+        x = WIDTH - size[0] - 62
+        y = (HEIGHT - size[1]) // 2
+        frame = Image.new("RGBA", (size[0] + 16, size[1] + 16), (9, 19, 33, 255))
+        frame.paste(mobile, (8, 8))
+        canvas.alpha_composite(frame, (x - 8, y - 8))
+        return canvas.convert("RGB")
+    return cover(image, progress, direction)
 
 
 def make_projectile_qa_capture() -> None:
@@ -401,9 +431,9 @@ def make_projectile_qa_capture() -> None:
     yellow = (255, 213, 100, 255)
     muted = (185, 205, 225, 255)
     rounded(draw, (58, 48, 1222, 652), 28, (8, 19, 34, 232), (98, 247, 209, 255), 3)
-    draw.text((90, 76), "PROJECTILE PHYSICS · UNIT TEST", font=font(18, True), fill=(98, 247, 209))
+    draw.text((90, 76), "PROJECTILE PHYSICS UNIT TEST", font=font(18, True), fill=(98, 247, 209))
     draw.text((90, 112), "화살과 그물, 서로 다른 회피 리듬", font=font(42, True), fill=white)
-    draw.text((92, 168), "실제 프로필 수치로 그린 궤도 검증 화면", font=font(22, False), fill=muted)
+    draw.text((92, 168), "실제 설정값으로 그린 날아가는 길 검증 화면", font=font(22, False), fill=muted)
 
     left, right, ground = 135, 1140, 520
     draw.line((left, ground, right, ground), fill=(104, 130, 159), width=3)
@@ -418,14 +448,14 @@ def make_projectile_qa_capture() -> None:
     draw.line(trajectory(68), fill=cyan, width=8)
     draw.ellipse((left - 10, ground - 10, left + 10, ground + 10), fill=yellow)
     draw.ellipse((right - 10, ground - 10, right + 10, ground + 10), fill=yellow)
-    draw.text((145, 548), "화살 · 520 px/s · 예고 0.50초 · 최고점 22", font=font(20, True), fill=orange)
-    draw.text((650, 548), "그물 · 340 px/s · 예고 0.65초 · 최고점 68", font=font(20, True), fill=cyan)
-    draw.text((145, 595), "PASS · 프레임 분할 독립", font=font(18, True), fill=white)
-    draw.text((420, 595), "PASS · 벽 스윕 충돌", font=font(18, True), fill=white)
-    draw.text((665, 595), "PASS · 원형 몸 판정", font=font(18, True), fill=white)
-    draw.text((925, 595), "PASS · 사거리 제한", font=font(18, True), fill=white)
-    draw.text((980, 250), "그물 높은 궤도", font=font(20, True), fill=cyan)
-    draw.text((520, 405), "화살 낮은 궤도", font=font(20, True), fill=orange)
+    draw.text((145, 548), "화살 520 px/s, 예고 0.50초, 최고점 22", font=font(20, True), fill=orange)
+    draw.text((650, 548), "그물 340 px/s, 예고 0.65초, 최고점 68", font=font(20, True), fill=cyan)
+    draw.text((145, 595), "PASS  프레임 분할 독립", font=font(18, True), fill=white)
+    draw.text((420, 595), "PASS  벽 스윕 충돌", font=font(18, True), fill=white)
+    draw.text((665, 595), "PASS  원형 몸 판정", font=font(18, True), fill=white)
+    draw.text((925, 595), "PASS  사거리 제한", font=font(18, True), fill=white)
+    draw.text((980, 250), "그물은 높게", font=font(20, True), fill=cyan)
+    draw.text((520, 405), "화살은 낮게", font=font(20, True), fill=orange)
     canvas.convert("RGB").save(CAPTURES / "capture-08-stage6.png", optimize=True)
 
 
@@ -436,7 +466,8 @@ def render_frame(scenes: list[dict], schedule: list[dict], spans: list[dict], to
     progress = min(1.0, max(0.0, (time_value - span["start"]) / max(0.01, span["end"] - span["start"])))
     visual_index = min(len(scene["visuals"]) - 1, int(progress * len(scene["visuals"])))
     visual_progress = (progress * len(scene["visuals"])) % 1.0
-    base = cover(load_capture(scene["visuals"][visual_index]), visual_progress, 1 if scene_index % 2 == 0 else -1)
+    source = load_capture(scene["visuals"][visual_index], visual_progress)
+    base = present_capture(source, visual_progress, 1 if scene_index % 2 == 0 else -1)
     canvas = base.convert("RGBA")
     canvas.alpha_composite(GRADIENT)
     draw = ImageDraw.Draw(canvas)
@@ -462,8 +493,6 @@ def render_frame(scenes: list[dict], schedule: list[dict], spans: list[dict], to
         draw.ellipse((78, y + 16, 86, y + 24), fill=cyan)
         draw.text((96, y + 10), bullet, font=FONT_SMALL, fill=white)
         y += 52
-
-    draw_purpose_graphic(canvas, draw, scene["id"], math.sin(time_value * 4) * 0.5 + 0.5)
 
     caption = active_caption(schedule, time_value, scene_index)
     rounded(draw, (42, 548, 1238, 674), 24, navy, (84, 112, 145, 255), 2)
@@ -502,7 +531,7 @@ def encode_video(ffmpeg: Path, scenes: list[dict], schedule: list[dict], spans: 
         "-r", "24", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "96k", "-ar", "48000",
         "-movflags", "+faststart", "-shortest",
-        "-metadata", "title=8초 도둑단 · OpenAI Game 2026 데모",
+        "-metadata", "title=8초 도둑단 OpenAI Game 2026 데모",
         "-metadata", "comment=실제 게임 캡처, 한국어 내레이션, 자체 생성 칩튠/SFX",
         str(output),
     ]
@@ -524,11 +553,16 @@ def encode_video(ffmpeg: Path, scenes: list[dict], schedule: list[dict], spans: 
 
 def main() -> None:
     WORK.mkdir(parents=True, exist_ok=True)
-    make_projectile_qa_capture()
     scenes = json.loads((HERE / "narration.json").read_text(encoding="utf-8"))
     schedule, spans, total, voice = build_timeline(scenes)
     if not (150 <= total <= 175):
         raise RuntimeError(f"영상 목표 길이를 벗어났습니다: {total:.2f}초")
+    for index, span in enumerate(spans, 1):
+        title = scenes[span["scene"]]["title"]
+        print(f"장면 {index}: {span['start']:.2f}초부터 {span['end']:.2f}초, {title}")
+    if os.environ.get("DEMO_TIMELINE_ONLY") == "1":
+        print(f"전체 길이: {total:.2f}초")
+        return
     make_srt(HERE / "8-second-crew-demo.srt", schedule)
     make_vtt(HERE / "8-second-crew-demo.vtt", schedule)
     audio = build_original_audio(total, voice, spans)
