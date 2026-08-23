@@ -119,7 +119,7 @@ const CORE = {
     guideNoise: "현재 위치로 경비원을 도발해 불러요.",
     guideClone: "지금까지 움직임을 분신으로 만들어요.",
     guideDoor: "발판에서 X를 누르면 다음 차례에 분신이 문을 열어요.",
-    guideItems: "시간 태엽은 +1.5초, 보호막은 1회 방어, 별은 추가 점수예요.",
+    guideItems: "시간 태엽은 표시된 만큼 시간을 늘리고, 보호막은 1회 방어하며, 별은 점수를 더해 줍니다.",
     guideScore: "이 스테이지에는 분신 {value}개가 필요해요. 최대 10개이며 더 쓰면 점수가 깎여요.",
     mute: "음소거",
     back: "뒤로",
@@ -276,7 +276,7 @@ const CORE = {
     guideNoise: "Taunt a guard to call them to your position.",
     guideClone: "Make a clone that repeats your moves.",
     guideDoor: "Press X on a switch. Your clone opens that door next round.",
-    guideItems: "Time Gear adds 1.5 sec, Shield blocks once, Star adds score.",
+    guideItems: "Time Gear adds the shown time, Shield blocks once, and Star adds score.",
     guideScore: "This stage needs {value} clones. You can make up to 10, but extras lower your score.",
     mute: "Mute",
     back: "Back",
@@ -433,7 +433,7 @@ const CORE = {
     guideNoise: "警備員を挑発して現在地へ呼びます。",
     guideClone: "今までの動きを分身にします。",
     guideDoor: "スイッチでXを押すと、次の回に分身がドアを開けます。",
-    guideItems: "時間ギアは+1.5秒、シールドは1回防御、星はボーナス点です。",
+    guideItems: "時間ギアは表示分だけ延長し、シールドは1回防御、星は得点を加えます。",
     guideScore: "このステージには分身が{value}体必要です。最大10体で、超えると減点です。",
     mute: "ミュート",
     back: "戻る",
@@ -491,7 +491,7 @@ const STAGES = {
     "06": { title: "거울 성", cue: "분신 두 개로 문 두 개를 열고 열쇠를 찾으세요", rule: "반대로 도는 감시등" },
     "07": { title: "왕실 금고", cue: "분신에게 역할을 나눠 열쇠를 찾고 탈출하세요", rule: "경비대장" },
     "08": { title: "자정 시계탑", cue: "보스를 피해 열쇠를 찾고 출구로 가세요", rule: "보스 경비대장" },
-    "09": { title: "불타는 지옥 성채", cue: "분신 3개로 문 3개를 열고 지옥불 열쇠를 찾아 탈출하세요", rule: "최종 보스와 모든 경비" },
+    "09": { title: "불타는 지옥 성채", cue: "지옥 태엽 +5초를 챙기고 분신 3개로 문 3개를 열어 탈출하세요", rule: "최종 보스, 암전과 화면 흔들림" },
   },
   en: {
     "01": { title: "Wind-up Museum", cue: "Find the key and reach the exit without entering guard sight", rule: "Club guard" },
@@ -502,7 +502,7 @@ const STAGES = {
     "06": { title: "Mirror Castle", cue: "Use two clones to open two doors, then find the key", rule: "Reverse searchlight" },
     "07": { title: "Royal Vault", cue: "Split the work between your clones, find the key, and escape", rule: "Guard captain" },
     "08": { title: "Midnight Clocktower", cue: "Avoid the boss, find the key, and reach the exit", rule: "Boss captain" },
-    "09": { title: "Burning Inferno Citadel", cue: "Use 3 clones to open 3 doors, then take the Inferno Key and escape", rule: "Final boss and every guard" },
+    "09": { title: "Burning Inferno Citadel", cue: "Take the +5s Inferno Gear, use 3 clones to open 3 doors, and escape", rule: "Final boss, blackout, and screen shake" },
   },
   ja: {
     "01": { title: "ぜんまい博物館", cue: "警備員の視界を避けてカギを探し、出口へ向かおう", rule: "こん棒の警備員" },
@@ -513,7 +513,7 @@ const STAGES = {
     "06": { title: "鏡の城", cue: "分身2体でドアを2つ開き、カギを探そう", rule: "逆回転サーチライト" },
     "07": { title: "王室金庫", cue: "分身に役割を分け、カギを探して脱出しよう", rule: "警備隊長" },
     "08": { title: "真夜中の時計塔", cue: "隊長を避けてカギを探し、出口へ向かおう", rule: "ボス警備隊長" },
-    "09": { title: "燃える地獄の城塞", cue: "分身3体でドアを3つ開き、地獄火のカギを取って脱出しよう", rule: "最終ボスと全警備員" },
+    "09": { title: "燃える地獄の城塞", cue: "+5秒の時間ギアを取り、分身3体でドアを3つ開いて脱出しよう", rule: "最終ボス、暗転と画面揺れ" },
   },
 };
 

@@ -1,4 +1,4 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.11.0";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.12.0";
 import {
   DEFAULT_PROFILE,
   LEGACY_DEFAULT_PROFILE_NAME,
@@ -13,11 +13,18 @@ import {
   normalizeProfileName,
   prepareStoredProfile,
   serializeStoredProfile,
-} from "./profile-utils.js?v=0.11.0";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.11.0";
-import { MAX_CLONES, canCreateClone, canEscape } from "./game-rules.js?v=0.11.0";
-import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.11.0";
-import { placeCanvasLabel, rectFullyInsideBounds } from "./label-layout.js?v=0.11.0";
+} from "./profile-utils.js?v=0.12.0";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.12.0";
+import {
+  MAX_CLONES,
+  canCreateClone,
+  canEscape,
+  stageNineBlackoutOpacity,
+  stageNineEventShakeIntensity,
+  stageNineShakeOffset,
+} from "./game-rules.js?v=0.12.0";
+import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.12.0";
+import { placeCanvasLabel, rectFullyInsideBounds } from "./label-layout.js?v=0.12.0";
 import {
   PROJECTILE_PROFILES,
   createProjectileLaunch,
@@ -25,7 +32,7 @@ import {
   projectileElapsedMs,
   projectileFlightPosition,
   shouldRemoveProjectile,
-} from "./projectile-utils.js?v=0.11.0";
+} from "./projectile-utils.js?v=0.12.0";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -325,7 +332,7 @@ const levels = [
     key: { x: 1030, y: 110 },
     keyType: KEY_TYPES.inferno,
     items: [
-      { id: "09-time", type: "time", x: 250, y: 565 },
+      { id: "09-time", type: "time", x: 250, y: 565, duration: 5000 },
       { id: "09-shield", type: "shield", x: 735, y: 565 },
       { id: "09-bonus", type: "bonus", x: 1010, y: 570, score: 1000 },
     ],
@@ -913,9 +920,9 @@ function showMenu(selectedIndex = null) {
       <div class="arcade-stage-card toy-stage-card" data-stage="${level.code}" data-theme="${level.theme.id}">
         <div class="arcade-stage-info">
           <div class="stage-heading">
-            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.11.0" alt="" aria-hidden="true"></span>
+            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.12.0" alt="" aria-hidden="true"></span>
             <div class="stage-heading__copy"><span class="arcade-rule">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length}</span><h2 class="stage-title"><span class="stage-title__local">${escapeHtml(stageCopy.title)}</span></h2><p class="stage-summary">${escapeHtml(stageCopy.rule)}</p></div>
-            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.11.0" alt="" aria-hidden="true"></span>` : ""}
+            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.12.0" alt="" aria-hidden="true"></span>` : ""}
           </div>
           <div class="stage-mission"><span>${t(settings.language, "currentGoal")}</span><b>${escapeHtml(stageCopy.cue)}</b></div>
           <div class="arcade-stats"><span>${t(settings.language, "difficulty")} ${level.difficulty}/${levels.length}</span><span>${t(settings.language, "best")} ${best ? formatRecordScore(best) : "--"}</span></div>
@@ -1382,9 +1389,21 @@ function updatePlatesAndDoors() {
     doorStates[index] = open;
     if (open !== wasOpen) {
       sound("door");
-      if (open) showSoundCaption("doorOpen", door);
+      if (open) {
+        showSoundCaption("doorOpen", door);
+        triggerStageNineShake("door-open");
+      }
     }
   });
+}
+
+function triggerStageNineShake(event) {
+  const intensity = stageNineEventShakeIntensity({
+    levelCode: level.code,
+    event,
+    reducedMotion: reducedMotionQuery.matches,
+  });
+  shake = Math.max(shake, intensity);
 }
 
 const VISION_RAY_SEGMENTS = 36;
@@ -1696,6 +1715,7 @@ function updateGuards(dt) {
     if (guard.boss && seesCurrent && !guard.bossAlertCaptioned) {
       guard.bossAlertCaptioned = true;
       showSoundCaption("bossAlert", guard);
+      triggerStageNineShake("boss-alert");
     }
     // 궁수와 그물총병은 발사체가 주 포획 수단이다. 레이더 게이지가 탄보다
     // 먼저 플레이어를 잡지 않도록 시야 누적은 경고 수준으로 낮춘다.
@@ -2515,8 +2535,13 @@ function drawItems(now) {
       ctx.fillRect(-4, -9, 5, 8);
     }
     ctx.restore();
+    const duration = item.type === "time" ? Number(item.duration) || type.duration : 0;
+    const durationValue = duration % 1000 === 0 ? String(duration / 1000) : (duration / 1000).toFixed(1);
+    const itemLabel = item.type === "time"
+      ? `${t(settings.language, type.nameKey)} ${t(settings.language, "timeBonusLabel", { value: durationValue })}`
+      : t(settings.language, type.nameKey);
     queueCanvasLabel({
-      text: t(settings.language, type.nameKey),
+      text: itemLabel,
       objectRect: { x: item.x - 20, y: item.y + bob - 21, w: 40, h: 45 },
       preferredSides: ["bottom", "top", "right", "left"],
       color: type.light,
@@ -3197,10 +3222,31 @@ function drawArcadeOverlay() {
   ctx.restore();
 }
 
+function drawStageNineBlackout() {
+  if (state !== "playing") return;
+  const opacity = stageNineBlackoutOpacity({
+    levelCode: level.code,
+    loopElapsedMs: loopElapsed,
+    reducedMotion: reducedMotionQuery.matches,
+  });
+  if (opacity <= 0) return;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = `rgba(5,2,13,${opacity})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+}
+
 function render(now) {
   const visualNow = reducedMotionQuery.matches ? 0 : now;
-  const shakeX = shake ? (Math.random() - 0.5) * shake : 0;
-  const shakeY = shake ? (Math.random() - 0.5) * shake : 0;
+  const stageNineShake = stageNineShakeOffset({
+    levelCode: level.code,
+    loopElapsedMs: loopElapsed,
+    intensity: shake,
+    reducedMotion: reducedMotionQuery.matches,
+  });
+  const shakeX = Number(level.code) === 9 ? stageNineShake.x : shake ? (Math.random() - 0.5) * shake : 0;
+  const shakeY = Number(level.code) === 9 ? stageNineShake.y : shake ? (Math.random() - 0.5) * shake : 0;
   updateRenderView();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "#020407";
@@ -3253,6 +3299,7 @@ function render(now) {
   }
   drawCanvasLabels();
   ctx.restore();
+  drawStageNineBlackout();
   drawArcadeOverlay();
 }
 

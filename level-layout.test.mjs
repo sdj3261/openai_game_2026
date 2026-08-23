@@ -165,6 +165,8 @@ test("nine stages expose a physical clone difficulty curve", () => {
     const plateIds = new Set(level.plates.map((plate) => plate.id));
     level.doors.forEach((door) => assert.ok(plateIds.has(door.plateId), `Stage ${level.code} door has no switch`));
   });
+  const finalTimeGear = levels[8].items.find((item) => item.type === "time");
+  assert.equal(finalTimeGear?.duration, 5000, "Stage 09 needs its five-second time gear for the guarded final escape");
 });
 
 test("all stage music loops are exactly eight seconds", () => {
