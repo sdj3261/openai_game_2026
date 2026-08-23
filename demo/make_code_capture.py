@@ -31,7 +31,7 @@ def main() -> None:
     draw.text((62, 158), "사람이 재미를 결정하고, Codex가 빠르게 만들고 검증했습니다.", font=font(24), fill=yellow)
 
     panels = [
-        (58, 218, 610, 592, "GAME LOGIC · game.js", clip_lines(ROOT / "game.js", ("calculateStealthScore", "requiredEchoes", "visionPolygon", "saveAndRewind"))),
+        (58, 218, 610, 592, "GAME LOGIC · game.js", clip_lines(ROOT / "game.js", ("calculateStealthScore", "canEscape", "visionPolygon", "saveAndRewind"))),
         (638, 218, 1222, 592, "AUTOMATED QA", [
             "PASS  input-utils.test.mjs · 입력 판정",
             "PASS  profile-utils.test.mjs · 점수/랭킹",

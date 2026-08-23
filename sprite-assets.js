@@ -1,4 +1,4 @@
-const ASSET_VERSION = "0.9.0";
+const ASSET_VERSION = "0.10.0";
 
 function loadImage(path) {
   const image = new Image();

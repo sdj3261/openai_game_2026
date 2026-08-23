@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import time
 import urllib.error
@@ -17,10 +18,6 @@ from pathlib import Path
 
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_FFMPEG = Path(
-    "C:/Users/tlseh/AppData/Local/Temp/eight-second-demo-tools/"
-    "node_modules/ffmpeg-static/ffmpeg.exe"
-)
 
 
 def synthesize(api_key: str, voice_id: str, text: str) -> bytes:
@@ -84,7 +81,10 @@ def main() -> None:
     if not api_key:
         raise SystemExit("ELEVENLABS_API_KEY is required")
 
-    ffmpeg = Path(os.environ.get("FFMPEG_PATH", str(DEFAULT_FFMPEG)))
+    ffmpeg_value = os.environ.get("FFMPEG_PATH") or shutil.which("ffmpeg")
+    if not ffmpeg_value:
+        raise SystemExit("Set FFMPEG_PATH or add ffmpeg to PATH")
+    ffmpeg = Path(ffmpeg_value)
     if not ffmpeg.exists():
         raise SystemExit(f"ffmpeg not found: {ffmpeg}")
 

@@ -90,7 +90,9 @@ export function calculateStealthScore(metrics = {}) {
   const radarPenalty = radarHits * 1200;
   const retryPenalty = retries * 650;
   const extraEchoes = Math.max(0, echoes - targetEchoes);
-  const echoPenalty = extraEchoes * 250;
+  // A little experimentation is cheap. Repeated brute-force clones are not:
+  // after two extras, every additional clone costs twice as much.
+  const echoPenalty = Math.min(extraEchoes, 2) * 250 + Math.max(0, extraEchoes - 2) * 500;
   const timePenalty = Math.max(0, Math.floor((time - 5000) / 10));
   const totalPenalty = radarPenalty + retryPenalty + echoPenalty + timePenalty;
   const stealthScore = Math.max(0, Math.min(10000, 10000 - totalPenalty));

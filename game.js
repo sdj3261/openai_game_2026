@@ -1,4 +1,4 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.9.0";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.10.0";
 import {
   PROFILE_COLORS,
   PROFILE_FACES,
@@ -8,9 +8,10 @@ import {
   getWorldLeaderboard,
   getWorldTopRecords,
   normalizeProfile,
-} from "./profile-utils.js?v=0.9.0";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.9.0";
-import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.9.0";
+} from "./profile-utils.js?v=0.10.0";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.10.0";
+import { MAX_CLONES, canCreateClone, canEscape } from "./game-rules.js?v=0.10.0";
+import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.10.0";
 import {
   PROJECTILE_PROFILES,
   createProjectileLaunch,
@@ -18,7 +19,7 @@ import {
   projectileElapsedMs,
   projectileFlightPosition,
   shouldRemoveProjectile,
-} from "./projectile-utils.js?v=0.9.0";
+} from "./projectile-utils.js?v=0.10.0";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -61,7 +62,7 @@ const LOOP_DURATION = 8000;
 const SAMPLE_INTERVAL = 1000 / 30;
 const PLAYER_SPEED = 260;
 const PLAYER_RADIUS = 16;
-const MAX_ECHOES = 5;
+const MAX_ECHOES = MAX_CLONES;
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const ECHO_COLORS = [
@@ -70,6 +71,11 @@ const ECHO_COLORS = [
   { body: "#10b981", trim: "#c7ffe9" },
   { body: "#ff7a33", trim: "#ffe0bd" },
   { body: "#f43f8f", trim: "#ffd0e4" },
+  { body: "#00b8d4", trim: "#c5f7ff" },
+  { body: "#f6b91a", trim: "#fff1b8" },
+  { body: "#ef4444", trim: "#ffd0d0" },
+  { body: "#84cc16", trim: "#e8ffc2" },
+  { body: "#5b5ff0", trim: "#d9dcff" },
 ];
 
 const GUARD_ARCHETYPES = {
@@ -92,7 +98,7 @@ const THEMES = {
   clocktower: { id: "clocktower", location: "자정 시계탑", floor: "#d8c9c2", glow: "#efe1d9", grid: "#a98b8b", wall: "#78394e", wallDark: "#452335", accent: "#bc3159" },
 };
 
-const TREASURE_TYPES = Object.freeze({
+const KEY_TYPES = Object.freeze({
   clockwork: Object.freeze({ nameKey: "treasureClockwork", value: 300, palette: Object.freeze({ main: "#30d5f2", dark: "#177dcc", light: "#d9fbff", accent: "#7d6cf2" }) }),
   amber: Object.freeze({ nameKey: "treasureAmber", value: 400, palette: Object.freeze({ main: "#f4a340", dark: "#b45d26", light: "#fff0b8", accent: "#dd6b35" }) }),
   candyRuby: Object.freeze({ nameKey: "treasureCandyRuby", value: 500, palette: Object.freeze({ main: "#ff537f", dark: "#bd275d", light: "#ffd4e2", accent: "#b84be3" }) }),
@@ -113,12 +119,12 @@ const levels = [
   {
     code: "01",
     difficulty: 1,
-    requiredEchoes: 0,
+    parEchoes: 0,
     theme: THEMES.museum,
     music: { label: "QUIET STEP", groove: "sparse", bpm: 90, root: 220, type: "triangle", steps: [0, null, 3, null, 7, null, 10, null, 7, null, 3, null] },
     start: { x: 100, y: 585 },
-    gem: { x: 1025, y: 110 },
-    treasure: TREASURE_TYPES.clockwork,
+    key: { x: 1025, y: 110 },
+    keyType: KEY_TYPES.clockwork,
     items: [{ id: "01-bonus", type: "bonus", x: 180, y: 170, score: 300 }],
     exit: { x: 1080, y: 585 },
     plates: [],
@@ -136,13 +142,12 @@ const levels = [
   {
     code: "02",
     difficulty: 2,
-    requiredEchoes: 1,
-    requiredNoiseEchoes: 1,
+    parEchoes: 0,
     theme: THEMES.warehouse,
     music: { label: "FACTORY BEAT", groove: "industrial", bpm: 105, root: 110, type: "square", steps: [0, null, 0, 7, null, 3, 0, null, 10, 7, null, 3, 0, null] },
     start: { x: 100, y: 580 },
-    gem: { x: 1035, y: 120 },
-    treasure: TREASURE_TYPES.amber,
+    key: { x: 1035, y: 120 },
+    keyType: KEY_TYPES.amber,
     items: [{ id: "02-shield", type: "shield", x: 250, y: 160 }],
     exit: { x: 1060, y: 585 },
     plates: [],
@@ -156,12 +161,12 @@ const levels = [
   {
     code: "03",
     difficulty: 3,
-    requiredEchoes: 1,
+    parEchoes: 1,
     theme: THEMES.casino,
     music: { label: "CASINO BOUNCE", groove: "bounce", bpm: 120, root: 196, type: "square", steps: [0, 3, 7, 10, 7, 3, 0, null, 0, 3, 7, 12, 10, 7, 3, null] },
     start: { x: 100, y: 585 },
-    gem: { x: 1015, y: 110 },
-    treasure: TREASURE_TYPES.candyRuby,
+    key: { x: 1015, y: 110 },
+    keyType: KEY_TYPES.candyRuby,
     items: [{ id: "03-time", type: "time", x: 620, y: 570 }],
     exit: { x: 1080, y: 585 },
     plates: [{ id: "A", x: 235, y: 120, r: 30 }],
@@ -179,12 +184,12 @@ const levels = [
   {
     code: "04",
     difficulty: 4,
-    requiredEchoes: 2,
+    parEchoes: 2,
     theme: THEMES.lab,
     music: { label: "LAB ALARM", groove: "alarm", bpm: 135, root: 131, type: "sawtooth", steps: [0, null, 7, 3, 10, 7, 12, null, 7, 0, null, 3, 7, 10, 15, 12, 7, null] },
     start: { x: 100, y: 585 },
-    gem: { x: 1030, y: 115 },
-    treasure: TREASURE_TYPES.cloudSapphire,
+    key: { x: 1030, y: 115 },
+    keyType: KEY_TYPES.cloudSapphire,
     items: [{ id: "04-bonus", type: "bonus", x: 170, y: 555, score: 400 }],
     exit: { x: 1080, y: 500 },
     plates: [{ id: "A", x: 250, y: 115, r: 30 }, { id: "B", x: 590, y: 115, r: 30 }],
@@ -201,13 +206,12 @@ const levels = [
   {
     code: "05",
     difficulty: 5,
-    requiredEchoes: 2,
-    requiredNoiseEchoes: 1,
+    parEchoes: 1,
     theme: THEMES.station,
     music: { label: "NIGHT TRAIN", groove: "bounce", bpm: 150, root: 147, type: "triangle", steps: [0, null, 3, 7, 10, 7, 3, null, 0, 3, 7, 12, 10, 7, 3, 0, -2, 0, 3, null] },
     start: { x: 100, y: 585 },
-    gem: { x: 1030, y: 110 },
-    treasure: TREASURE_TYPES.moonPearl,
+    key: { x: 1030, y: 110 },
+    keyType: KEY_TYPES.moonPearl,
     items: [{ id: "05-time", type: "time", x: 650, y: 155 }],
     exit: { x: 1080, y: 585 },
     plates: [{ id: "A", x: 255, y: 570, r: 30 }],
@@ -225,12 +229,12 @@ const levels = [
   {
     code: "06",
     difficulty: 6,
-    requiredEchoes: 2,
+    parEchoes: 2,
     theme: THEMES.castle,
     music: { label: "MIRROR STEP", groove: "alarm", bpm: 165, root: 165, type: "square", steps: [0, 3, 7, 10, 7, 3, 0, null, 2, 5, 9, 12, 9, 5, 2, null, 0, 3, 7, 12, 10, null] },
     start: { x: 100, y: 585 },
-    gem: { x: 1030, y: 110 },
-    treasure: TREASURE_TYPES.mirrorOpal,
+    key: { x: 1030, y: 110 },
+    keyType: KEY_TYPES.mirrorOpal,
     items: [{ id: "06-shield", type: "shield", x: 640, y: 160 }],
     exit: { x: 1080, y: 585 },
     plates: [{ id: "A", x: 230, y: 115, r: 30 }, { id: "B", x: 600, y: 570, r: 30 }],
@@ -249,13 +253,12 @@ const levels = [
   {
     code: "07",
     difficulty: 7,
-    requiredEchoes: 3,
-    requiredNoiseEchoes: 1,
+    parEchoes: 2,
     theme: THEMES.vault,
     music: { label: "ROYAL RUSH", groove: "alarm", bpm: 180, root: 123, type: "square", steps: [0, 0, 3, 7, 10, 7, 3, 0, 5, 5, 8, 12, 10, 8, 5, 3, 0, 3, 7, 12, 15, 12, 7, null] },
     start: { x: 100, y: 585 },
-    gem: { x: 1030, y: 110 },
-    treasure: TREASURE_TYPES.crownEmerald,
+    key: { x: 1030, y: 110 },
+    keyType: KEY_TYPES.crownEmerald,
     items: [{ id: "07-bonus", type: "bonus", x: 650, y: 105, score: 600 }],
     exit: { x: 1080, y: 585 },
     plates: [{ id: "A", x: 220, y: 115, r: 30 }, { id: "B", x: 560, y: 570, r: 30 }],
@@ -275,13 +278,12 @@ const levels = [
   {
     code: "08",
     difficulty: 8,
-    requiredEchoes: 3,
-    requiredNoiseEchoes: 1,
+    parEchoes: 2,
     theme: THEMES.clocktower,
     music: { label: "CLOCK BOSS", groove: "boss", bpm: 195, root: 98, type: "sawtooth", steps: [0, 0, 3, 7, 0, 10, 7, 3, 0, -2, 0, 3, 7, 12, 10, 7, 3, 0, 5, 8, 12, 15, 12, 8, 3, null] },
     start: { x: 100, y: 585 },
-    gem: { x: 1030, y: 110 },
-    treasure: TREASURE_TYPES.midnightStar,
+    key: { x: 1030, y: 110 },
+    keyType: KEY_TYPES.midnightStar,
     items: [
       { id: "08-time", type: "time", x: 445, y: 550 },
       { id: "08-shield", type: "shield", x: 830, y: 570 },
@@ -415,8 +417,8 @@ let stageStartedAt = 0;
 let completedLoopElapsed = 0;
 let loopLimit = LOOP_DURATION;
 let timeBonusCollected = false;
-let treasureCollected = false;
-let treasureValueCollected = 0;
+let keyCollected = false;
+let keyValueCollected = 0;
 let collectedItemIds = new Set();
 let itemBonusScore = 0;
 let radarShieldCharges = 0;
@@ -714,6 +716,23 @@ function showSettingsOverlay() {
   setOverlay(`
     <section class="panel toy-dialog settings-dialog" aria-labelledby="overlayTitle">
       <h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "settings")}</h2>
+      <section class="game-guide" aria-labelledby="gameGuideTitle">
+        <h3 id="gameGuideTitle">${t(settings.language, "guide")}</h3>
+        <ol class="game-guide__flow">
+          <li>${t(settings.language, "ruleRun")}</li>
+          <li>${t(settings.language, "gem")}</li>
+          <li>${t(settings.language, "open")}</li>
+          <li>${t(settings.language, "exit")}</li>
+        </ol>
+        <p class="game-guide__summary">${t(settings.language, "guideEight")}</p>
+        <ul class="game-guide__actions">
+          <li><kbd>Z</kbd><span>${t(settings.language, "guideNoise")}</span></li>
+          <li><kbd>X</kbd><span>${t(settings.language, "guideClone")}</span></li>
+          <li class="is-wide"><b aria-hidden="true">▣</b><span>${t(settings.language, "guideDoor")}</span></li>
+        </ul>
+        <p class="game-guide__items">${t(settings.language, "guideItems")}</p>
+        <p class="game-guide__note">${t(settings.language, "guideScore", { value: level.parEchoes })}</p>
+      </section>
       <label class="setting-row" for="languageSetting"><span><b>${t(settings.language, "language")}</b><small>한국어 · English · 日本語</small></span><select class="toy-select" id="languageSetting">${languageOptions}</select></label>
       <label class="setting-row" for="visualSoundSetting"><span><b>${t(settings.language, "visualSound")}</b><small>${t(settings.language, "visualSoundHelp")}</small></span><input id="visualSoundSetting" type="checkbox" ${settings.visualSound ? "checked" : ""} /></label>
       <label class="setting-row" for="soundSetting"><span><b>${t(settings.language, "sound")}</b><small>${t(settings.language, "gameSound")}</small></span><input id="soundSetting" type="checkbox" ${muted ? "" : "checked"} /></label>
@@ -821,9 +840,9 @@ function showMenu(selectedIndex = null) {
       <div class="arcade-stage-card toy-stage-card" data-stage="${level.code}" data-theme="${level.theme.id}">
         <div class="arcade-stage-info">
           <div class="stage-heading">
-            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.9.0" alt="" aria-hidden="true"></span>
+            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.10.0" alt="" aria-hidden="true"></span>
             <div class="stage-heading__copy"><span class="arcade-rule">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length}</span><h2 class="stage-title"><span class="stage-title__local">${escapeHtml(stageCopy.title)}</span></h2><p class="stage-summary">${escapeHtml(stageCopy.rule)}</p></div>
-            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.9.0" alt="" aria-hidden="true"></span>` : ""}
+            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.10.0" alt="" aria-hidden="true"></span>` : ""}
           </div>
           <div class="stage-mission"><span>${t(settings.language, "currentGoal")}</span><b>${escapeHtml(stageCopy.cue)}</b></div>
           <div class="arcade-stats"><span>${t(settings.language, "difficulty")} ${level.difficulty}/${levels.length}</span><span>${t(settings.language, "best")} ${best ? formatRecordScore(best) : "--"}</span></div>
@@ -900,8 +919,8 @@ function startLevel(index = levelIndex) {
   loopNumber = 1;
   loopLimit = LOOP_DURATION;
   timeBonusCollected = false;
-  treasureCollected = false;
-  treasureValueCollected = 0;
+  keyCollected = false;
+  keyValueCollected = 0;
   collectedItemIds = new Set();
   itemBonusScore = 0;
   radarShieldCharges = 0;
@@ -928,13 +947,17 @@ function startLevel(index = levelIndex) {
 
 function resetLoop(withEffect = true, preserveStick = false) {
   loopLimit = stageLoopLimit();
+  // The key belongs to the current 8-second attempt. Rewinding starts a new
+  // attempt, so the player must pick it up and reach the exit in one run.
+  keyCollected = false;
+  keyValueCollected = 0;
   player = {
     id: "current",
     x: level.start.x,
     y: level.start.y,
     angle: -Math.PI / 2,
     radius: PLAYER_RADIUS,
-    hasGem: treasureCollected,
+    hasKey: false,
     exposure: 0,
     noiseCooldown: 0,
     exitHintShown: false,
@@ -976,7 +999,7 @@ function saveAndRewind() {
     showToast(t(settings.language, "moveFirst"), 800);
     return;
   }
-  if (echoes.length >= MAX_ECHOES) {
+  if (!canCreateClone(echoes.length)) {
     showToast(t(settings.language, "echoFull"), 850);
     return;
   }
@@ -1017,8 +1040,8 @@ function restartWholeLevel() {
   loopNumber = 1;
   loopLimit = LOOP_DURATION;
   timeBonusCollected = false;
-  treasureCollected = false;
-  treasureValueCollected = 0;
+  keyCollected = false;
+  keyValueCollected = 0;
   collectedItemIds = new Set();
   itemBonusScore = 0;
   radarShieldCharges = 0;
@@ -1247,26 +1270,22 @@ function updatePlayer(dt) {
     if (!collectedItemIds.has(item.id) && dist(player, item) < 28) collectStageItem(item);
   }
 
-  if (!treasureCollected && dist(player, level.gem) < 29) {
-    treasureCollected = true;
-    treasureValueCollected = level.treasure?.value || 0;
-    player.hasGem = true;
+  if (!keyCollected && dist(player, level.key) < 29) {
+    keyCollected = true;
+    keyValueCollected = level.keyType?.value || 0;
+    player.hasKey = true;
     sound("gem");
     flash = reducedMotionQuery.matches ? 0 : 0.7;
-    burst(level.gem.x, level.gem.y, level.treasure?.palette?.accent || "#ffd166", 26, 150);
-    const treasureName = t(settings.language, level.treasure?.nameKey || "gem");
-    showToast(`${t(settings.language, "treasureGet", { name: treasureName, value: treasureValueCollected.toLocaleString(settings.language) })} → ${t(settings.language, "exit")}`, 1200);
-    showSoundCaption("gemGet", level.gem);
+    burst(level.key.x, level.key.y, level.keyType?.palette?.accent || "#ffd166", 26, 150);
+    const keyName = t(settings.language, level.keyType?.nameKey || "gem");
+    showToast(t(settings.language, "treasureGet", { name: keyName, value: keyValueCollected.toLocaleString(settings.language) }), 1400);
+    showSoundCaption("gemGet", level.key);
   }
-  if (player.hasGem && dist(player, level.exit) < 38) {
-    const noiseEchoes = echoes.filter((echo) => echo.recording.events.some((event) => event.type === "noise")).length;
-    if (echoes.length >= level.requiredEchoes && noiseEchoes >= (level.requiredNoiseEchoes || 0)) completeLevel();
+  if (dist(player, level.exit) < 38) {
+    if (canEscape({ hasKey: player.hasKey })) completeLevel();
     else if (!player.exitHintShown) {
       player.exitHintShown = true;
-      const message = echoes.length < level.requiredEchoes
-        ? t(settings.language, "needEcho", { value: level.requiredEchoes })
-        : t(settings.language, "needNoiseEcho");
-      showToast(message, 1200);
+      showToast(t(settings.language, "needKey"), 1100);
     }
   } else if (dist(player, level.exit) > 60) {
     player.exitHintShown = false;
@@ -1469,7 +1488,7 @@ function updateProjectiles(dt) {
   if (!projectiles.length) return;
   const solids = getSolidRects();
   // 분신과 현재의 내가 정확히 겹친 순간에는 분신이 탄을 대신 맞아야
-  // 미끼 규칙이 예측 가능하다.
+  // 소리 유인 규칙이 예측 가능하다.
   const actors = [...echoes, player];
   const survivors = [];
 
@@ -1521,7 +1540,7 @@ function updateGuards(dt) {
   const actors = [player, ...echoes];
 
   // 한 번의 소음에는 가장 가까운 경비 한 명만 반응한다. 경비가 많을수록
-  // 전부 같은 미끼에 몰려 오히려 쉬워지는 현상을 막는다.
+  // 전부 같은 소리에 몰려 오히려 쉬워지는 현상을 막는다.
   for (const pulse of noisePulses) {
     if (pulse.responderId || pulse.life <= 0.35) continue;
     const responder = guards
@@ -1611,7 +1630,7 @@ function updateGuards(dt) {
 
     let weaponTarget = null;
     if (visible.length) {
-      // 에코는 미끼 역할을 유지하지만, 실제 플레이어가 함께 보이면 발각 게이지는
+      // 분신은 소리로 경비를 유인하지만, 실제 플레이어가 함께 보이면 발각 게이지는
       // 별도로 오른다. 시야가 끊긴 뒤에는 마지막으로 본 위치만 조사한다.
       const visibleEchoes = visible.filter((actor) => actor.id !== player.id)
         .sort((a, b) => dist(guard, a) - dist(guard, b));
@@ -1680,9 +1699,9 @@ function completeLevel() {
     radarHits: runRadarHits,
     retries: runRetries,
     echoes: echoes.length,
-    targetEchoes: level.requiredEchoes,
+    targetEchoes: level.parEchoes,
     time: Math.round(completedLoopElapsed),
-    treasureValue: treasureValueCollected,
+    treasureValue: keyValueCollected,
     itemBonus: itemBonusScore,
   });
   const run = {
@@ -1692,11 +1711,13 @@ function completeLevel() {
     echoes: echoes.length,
     radarHits: runRadarHits,
     retries: runRetries,
-    treasureValue: treasureValueCollected,
+    treasureValue: keyValueCollected,
     itemBonus: itemBonusScore,
     itemsCollected: collectedItemIds.size,
     score: scoreResult.score,
     stealthScore: scoreResult.breakdown.stealthScore,
+    targetEchoes: level.parEchoes,
+    echoPenalty: scoreResult.breakdown.echoPenalty,
     grade: scoreResult.grade,
     name: profile.name,
     color: profile.color,
@@ -1729,9 +1750,9 @@ function showCompleteOverlay() {
     radarHits: runRadarHits,
     retries: runRetries,
     echoes: echoes.length,
-    targetEchoes: level.requiredEchoes,
+    targetEchoes: level.parEchoes,
     time: completedLoopElapsed,
-    treasureValue: treasureValueCollected,
+    treasureValue: keyValueCollected,
     itemBonus: itemBonusScore,
   });
   const result = lastClearResult || {
@@ -1740,10 +1761,12 @@ function showCompleteOverlay() {
       echoes: echoes.length,
       radarHits: runRadarHits,
       retries: runRetries,
-      treasureValue: treasureValueCollected,
+      treasureValue: keyValueCollected,
       itemBonus: itemBonusScore,
       itemsCollected: collectedItemIds.size,
       stealthScore: fallbackScore.breakdown.stealthScore,
+      targetEchoes: level.parEchoes,
+      echoPenalty: fallbackScore.breakdown.echoPenalty,
       ...fallbackScore,
     },
     previousBest: null,
@@ -1775,8 +1798,8 @@ function showCompleteOverlay() {
       <div class="arcade-score">
         <div><span>${t(settings.language, "radarHits")}</span><b>${result.run.radarHits}</b></div>
         <div><span>${t(settings.language, "retries")}</span><b>${result.run.retries}</b></div>
-        <div><span>${t(settings.language, "echoName")}</span><b>×${result.run.echoes}</b></div>
-        <div><span>${t(settings.language, "timeLeft")}</span><b>${formatRecordTime(result.run.time)}</b></div>
+        <div><span>${t(settings.language, "cloneUse", { used: result.run.echoes, max: MAX_ECHOES, target: result.run.targetEchoes ?? level.parEchoes })}</span><b>${Number(result.run.echoPenalty || 0) > 0 ? `−${Number(result.run.echoPenalty).toLocaleString(settings.language)}` : t(settings.language, "noPenalty")}</b></div>
+        <div><span>${t(settings.language, "clearTime")}</span><b>${formatRecordTime(result.run.time)}</b></div>
         <div><span>${t(settings.language, "treasureValue")}</span><b>+${Number(result.run.treasureValue || 0).toLocaleString(settings.language)}</b></div>
         <div><span>${t(settings.language, "itemBonusScore")}</span><b>+${Number(result.run.itemBonus || 0).toLocaleString(settings.language)}</b></div>
       </div>
@@ -1899,6 +1922,9 @@ function update(dt, now) {
 
   if (loopElapsed >= loopLimit && state === "playing") {
     recordCurrentPose(loopLimit);
+    keyCollected = false;
+    keyValueCollected = 0;
+    player.hasKey = false;
     state = "awaiting-save";
     resetStickInput();
     moveTarget = null;
@@ -1943,9 +1969,9 @@ function updateHud() {
     loopLimit,
     scoreRun: { radarHits: runRadarHits, retries: runRetries },
     timeBonusCollected,
-    treasure: { collected: treasureCollected, value: treasureValueCollected, nameKey: level.treasure?.nameKey },
+    key: { collected: keyCollected, value: keyValueCollected, nameKey: level.keyType?.nameKey },
     items: { collected: [...collectedItemIds], bonus: itemBonusScore, shieldCharges: radarShieldCharges },
-    player: player ? { x: Math.round(player.x), y: Math.round(player.y), hasGem: player.hasGem, exposure: Number(player.exposure.toFixed(2)) } : null,
+    player: player ? { x: Math.round(player.x), y: Math.round(player.y), hasKey: player.hasKey, exposure: Number(player.exposure.toFixed(2)) } : null,
     echoes: echoes.map((echo) => {
       const savedEnd = echo.recording.frames[echo.recording.frames.length - 1];
       return {
@@ -2315,87 +2341,65 @@ function drawItems(now) {
   }
 }
 
-function drawGem(now) {
-  if (treasureCollected) return;
+function drawKey(now) {
+  if (keyCollected) return;
   const phase = Math.floor(now / 120) % 8;
-  const bob = [0, -2, -4, -6, -4, -2, 0, 2][phase];
+  const bob = [0, -1, -2, -3, -2, -1, 0, 1][phase];
   const shimmer = [0, 2, 3, 2, 0, -2, -3, -2][phase];
-  const treasure = level.treasure || TREASURE_TYPES.clockwork;
-  const palette = treasure.palette;
+  const keyType = level.keyType || KEY_TYPES.clockwork;
+  const palette = keyType.palette;
   ctx.save();
-  ctx.translate(Math.round(level.gem.x), Math.round(level.gem.y + bob));
+  ctx.translate(Math.round(level.key.x), Math.round(level.key.y + bob));
   ctx.fillStyle = "rgba(23,35,58,.24)";
-  ctx.fillRect(-12, 19, 24, 4);
+  ctx.fillRect(-16, 13, 34, 4);
 
-  // Character-scale cut diamond: clear silhouette without dominating the map.
-  ctx.beginPath();
-  ctx.moveTo(-14, -5);
-  ctx.lineTo(-8, -14);
-  ctx.lineTo(8, -14);
-  ctx.lineTo(14, -5);
-  ctx.lineTo(0, 18);
-  ctx.closePath();
+  // A chunky toy key reads clearly at mobile size without dominating the map.
   ctx.fillStyle = ACTOR_COLORS.outline;
+  ctx.beginPath();
+  ctx.moveTo(-17, -7); ctx.lineTo(-11, -13); ctx.lineTo(-3, -13);
+  ctx.lineTo(4, -7); ctx.lineTo(4, -5); ctx.lineTo(19, -5);
+  ctx.lineTo(19, 5); ctx.lineTo(14, 5); ctx.lineTo(14, 10);
+  ctx.lineTo(8, 10); ctx.lineTo(8, 5); ctx.lineTo(4, 5);
+  ctx.lineTo(-3, 12); ctx.lineTo(-11, 12); ctx.lineTo(-17, 6);
+  ctx.closePath();
   ctx.fill();
 
-  ctx.beginPath();
-  ctx.moveTo(-10, -4);
-  ctx.lineTo(-6, -10);
-  ctx.lineTo(6, -10);
-  ctx.lineTo(10, -4);
-  ctx.lineTo(0, 13);
-  ctx.closePath();
   ctx.fillStyle = palette.main;
-  ctx.fill();
-
   ctx.beginPath();
-  ctx.moveTo(-10, -4);
-  ctx.lineTo(-4, -4);
-  ctx.lineTo(0, 13);
+  ctx.moveTo(-13, -5); ctx.lineTo(-9, -9); ctx.lineTo(-4, -9);
+  ctx.lineTo(1, -5); ctx.lineTo(1, -1); ctx.lineTo(15, -1);
+  ctx.lineTo(15, 2); ctx.lineTo(10, 2); ctx.lineTo(10, 6);
+  ctx.lineTo(8, 6); ctx.lineTo(8, 2); ctx.lineTo(1, 2);
+  ctx.lineTo(-4, 8); ctx.lineTo(-9, 8); ctx.lineTo(-13, 4);
   ctx.closePath();
-  ctx.fillStyle = palette.dark;
   ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(10, -4);
-  ctx.lineTo(4, -4);
-  ctx.lineTo(0, 13);
-  ctx.closePath();
-  ctx.fillStyle = palette.accent;
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(-6, -10);
-  ctx.lineTo(-4, -4);
-  ctx.lineTo(4, -4);
-  ctx.lineTo(6, -10);
-  ctx.closePath();
   ctx.fillStyle = palette.light;
-  ctx.fill();
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(-4, -8, 4, 2);
-  ctx.fillRect(-6, -7, 2, 5);
+  ctx.fillRect(-9, -6, 5, 3);
+  ctx.fillRect(2, 0, 10, 2);
+  ctx.fillStyle = palette.dark;
+  ctx.fillRect(-9, -2, 5, 5);
 
-  // Small sparkles preserve pickup readability above a red radar cone.
+  // Small sparkles keep the key visible over a red radar cone.
   ctx.fillStyle = phase % 2 ? "#ffffff" : "#fff2a8";
-  ctx.fillRect(-20 + shimmer, -1, 5, 2);
-  ctx.fillRect(-19 + shimmer, -4, 2, 7);
-  ctx.fillRect(15 - shimmer, 4, 5, 2);
-  ctx.fillRect(17 - shimmer, 1, 2, 7);
-  ctx.fillRect(-1, -19 + shimmer / 2, 2, 4);
+  ctx.fillRect(-22 + shimmer, -1, 5, 2);
+  ctx.fillRect(-20 + shimmer, -3, 2, 6);
+  ctx.fillRect(20 - shimmer, 1, 4, 2);
+  ctx.fillRect(21 - shimmer, -1, 2, 6);
   ctx.restore();
 
-  const label = t(settings.language, treasure.nameKey);
+  const label = t(settings.language, keyType.nameKey);
   ctx.font = '900 8px "Galmuri11", "Malgun Gothic", sans-serif';
   const labelWidth = clamp(Math.ceil(ctx.measureText(label).width) + 8, 48, 100);
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(level.gem.x - labelWidth / 2, level.gem.y + 24, labelWidth, 13);
+  ctx.fillRect(level.key.x - labelWidth / 2, level.key.y + 20, labelWidth, 13);
   ctx.fillStyle = palette.light;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(label, level.gem.x, level.gem.y + 30.5);
+  ctx.fillText(label, level.key.x, level.key.y + 26.5);
 }
 
 function drawExit(now) {
-  const active = player?.hasGem;
+  const active = player?.hasKey;
   const phase = Math.floor(now / 140) % 4;
   ctx.save();
   ctx.translate(Math.round(level.exit.x), Math.round(level.exit.y));
@@ -2559,16 +2563,19 @@ function drawProjectiles() {
   }
 }
 
-function drawHeldTreasure(actor, spriteSize = 48) {
-  if (actor !== player || !player.hasGem) return;
+function drawHeldKey(actor, spriteSize = 48) {
+  if (actor !== player || !player.hasKey) return;
   ctx.save();
   ctx.translate(Math.round(actor.x), Math.round(actor.y - spriteSize * 0.58));
   ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(-7, -7, 14, 14);
-  ctx.fillStyle = level.treasure?.palette?.main || ACTOR_COLORS.target;
-  ctx.fillRect(-5, -5, 10, 10);
-  ctx.fillStyle = level.treasure?.palette?.light || "#fff4a8";
-  ctx.fillRect(-1, -4, 4, 4);
+  ctx.fillRect(-8, -6, 9, 12);
+  ctx.fillRect(0, -2, 10, 5);
+  ctx.fillRect(6, 2, 4, 5);
+  ctx.fillStyle = level.keyType?.palette?.main || ACTOR_COLORS.target;
+  ctx.fillRect(-5, -3, 4, 6);
+  ctx.fillRect(0, 0, 7, 2);
+  ctx.fillStyle = level.keyType?.palette?.light || "#fff4a8";
+  ctx.fillRect(-4, -2, 2, 2);
   ctx.restore();
 }
 
@@ -2609,7 +2616,7 @@ function drawDuckAgentSprite(actor, isEcho, index) {
     ctx.fillText(String(index + 1), x, badgeY + 1);
   }
   ctx.restore();
-  if (!isEcho) drawHeldTreasure(actor, size);
+  if (!isEcho) drawHeldKey(actor, size);
   return true;
 }
 
@@ -2685,7 +2692,7 @@ function drawAgent(actor, isEcho = false, index = 0) {
   }
   ctx.restore();
 
-  if (!isEcho) drawHeldTreasure(actor, unit * 22);
+  if (!isEcho) drawHeldKey(actor, unit * 22);
 }
 
 function drawEchoTrail(echo, index) {
@@ -2999,7 +3006,7 @@ function render(now) {
   drawPlatesAndDoors(visualNow);
   drawWalls();
   drawItems(visualNow);
-  drawGem(visualNow);
+  drawKey(visualNow);
   drawMoveTarget(visualNow);
   echoes.forEach(drawEchoTrail);
   drawNoise();
@@ -3217,9 +3224,9 @@ window.__LOOP_HEIST_DEBUG__ = {
     loopLimit,
     scoreRun: { radarHits: runRadarHits, retries: runRetries },
     timeBonusCollected,
-    treasure: { collected: treasureCollected, value: treasureValueCollected, nameKey: level.treasure?.nameKey },
+    key: { collected: keyCollected, value: keyValueCollected, nameKey: level.keyType?.nameKey },
     items: { collected: [...collectedItemIds], bonus: itemBonusScore, shieldCharges: radarShieldCharges },
-    player: player ? { x: player.x, y: player.y, hasGem: player.hasGem, exposure: player.exposure } : null,
+    player: player ? { x: player.x, y: player.y, hasKey: player.hasKey, exposure: player.exposure } : null,
     echoes: echoes.map((echo) => {
       const savedEnd = echo.recording.frames[echo.recording.frames.length - 1];
       return { x: echo.x, y: echo.y, savedEnd: savedEnd ? { ...savedEnd } : null };

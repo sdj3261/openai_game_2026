@@ -4,15 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#72d9ff" />
-    <meta name="description" content="8초 행동을 저장한 분신과 함께 장난감 도시의 보석을 훔치는 잠입 게임" />
-    <title>8초 도둑단 — 분신과 보석을 훔쳐요</title>
-    <link rel="icon" href="./favicon.ico?v=0.9.0" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/favicon-32.png?v=0.9.0" />
-    <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/favicon-16.png?v=0.9.0" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=0.9.0" />
-    <link rel="manifest" href="./site.webmanifest?v=0.9.0" />
-    <link rel="stylesheet" href="./design-system.css?v=0.9.0" />
-    <link rel="stylesheet" href="./styles.css?v=0.9.0" />
+    <meta name="description" content="8초 안에 열쇠를 찾아 잠긴 출구로 탈출하는 분신 협동 게임" />
+    <title>8초 도둑단</title>
+    <link rel="icon" href="./favicon.ico?v=0.10.0" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/favicon-32.png?v=0.10.0" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/favicon-16.png?v=0.10.0" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=0.10.0" />
+    <link rel="manifest" href="./site.webmanifest?v=0.10.0" />
+    <link rel="stylesheet" href="./design-system.css?v=0.10.0" />
+    <link rel="stylesheet" href="./styles.css?v=0.10.0" />
   </head>
   <body>
     <a class="skip-link" href="#game">게임 화면으로 바로가기</a>
@@ -21,10 +21,10 @@
         <div class="brand"><span class="brand-mark" aria-hidden="true">⏱</span> <span id="brandText">8초 도둑단</span></div>
         <div class="mission-copy">
           <span id="stageName">스테이지 1</span>
-          <small id="objective">빨간 레이더를 피해 보석을 훔쳐라!</small>
+          <small id="objective">열쇠를 찾으면 출구가 열려요!</small>
         </div>
-        <div class="hud-cluster" aria-label="현재 타임라인 정보">
-          <div class="hud-stat"><span id="loopLabel">루프</span><strong id="loopCount">1</strong></div>
+        <div class="hud-cluster" aria-label="현재 게임 정보">
+          <div class="hud-stat"><span id="loopLabel">차례</span><strong id="loopCount">1</strong></div>
           <div class="hud-stat"><span id="echoLabel">분신</span><strong id="echoCount">0</strong></div>
           <div class="hud-stat timer-stat"><span id="timeLabel">남은 시간</span><strong id="timer">8.0</strong></div>
         </div>
@@ -34,7 +34,7 @@
         <canvas id="game" width="1200" height="700" tabindex="0" aria-label="8초 도둑단 장난감 도시 잠입 게임 화면" aria-describedby="gameHelp gameState">
           Canvas를 지원하는 최신 브라우저에서 플레이할 수 있습니다.
         </canvas>
-        <p class="sr-only" id="gameHelp">방향키 또는 WASD와 화면 터치로 이동합니다. Z는 소리 미끼, X는 현재 행동을 분신으로 저장합니다. 빨간 경비 레이더를 피해 보석을 챙기고 출구에 도착하면 완료됩니다.</p>
+        <p class="sr-only" id="gameHelp">8초 안에 열쇠를 찾고 출구로 가세요. Z로 경비원을 도발하면 현재 위치로 불러옵니다. X를 누르면 방금 움직임을 따라 하는 분신이 생깁니다.</p>
         <p class="sr-only" id="gameState">작전 메뉴가 열렸습니다.</p>
 
         <div class="alert-meter" id="alertMeter" role="meter" aria-label="발각 위험도" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="안전">
@@ -54,16 +54,16 @@
           <span class="virtual-stick__tick virtual-stick__tick--down" aria-hidden="true"></span>
           <span class="virtual-stick__tick virtual-stick__tick--left" aria-hidden="true"></span>
           <span class="virtual-stick__knob" id="virtualStickKnob" aria-hidden="true"><i></i></span>
-          <span class="virtual-stick__label" aria-hidden="true">MOVE</span>
+          <span class="virtual-stick__label" aria-hidden="true">이동</span>
         </div>
 
         <div class="mobile-primary-actions">
-          <button class="mobile-action mobile-action--noise" type="button" data-game-action="noise" aria-keyshortcuts="Z"><strong>Z</strong><span id="noiseActionLabel">미끼</span></button>
-          <button class="mobile-action mobile-action--echo" type="button" data-game-action="save" aria-keyshortcuts="X"><strong>X</strong><span id="cloneActionLabel">분신 저장</span></button>
+          <button class="mobile-action mobile-action--noise" type="button" data-game-action="noise" aria-keyshortcuts="Z"><strong>Z</strong><span id="noiseActionLabel">경비원 도발</span></button>
+          <button class="mobile-action mobile-action--echo" type="button" data-game-action="save" aria-keyshortcuts="X"><strong>X</strong><span id="cloneActionLabel">분신 만들기</span></button>
         </div>
 
         <nav class="mobile-utility-actions" aria-label="추가 게임 조작">
-          <button class="utility-action" type="button" data-game-action="restart" aria-label="현재 루프 재시작" aria-keyshortcuts="R"><span aria-hidden="true">↺</span><small id="restartActionLabel">다시</small></button>
+          <button class="utility-action" type="button" data-game-action="restart" aria-label="현재 차례 다시 하기" aria-keyshortcuts="R"><span aria-hidden="true">↺</span><small id="restartActionLabel">다시</small></button>
           <button class="utility-action" type="button" data-game-action="undo" aria-label="마지막 분신 지우기"><span aria-hidden="true">↶</span><small id="undoActionLabel">분신 지우기</small></button>
           <button class="utility-action" type="button" data-game-action="menu" aria-label="스테이지 선택"><span aria-hidden="true">☰</span><small id="mapActionLabel">맵</small></button>
           <button class="utility-action utility-action--mute" type="button" data-game-action="mute" aria-label="사운드 켜기 또는 끄기" aria-keyshortcuts="M" aria-pressed="false"><span aria-hidden="true">♪</span><small id="muteActionLabel">소리</small></button>
@@ -73,11 +73,11 @@
       <footer class="controls" aria-label="키보드 조작 안내">
         <span><kbd>←↑↓→</kbd> <i id="desktopMoveLabel">이동</i></span>
         <span><kbd>클릭</kbd> <i id="desktopClickLabel">이동</i></span>
-        <span><kbd>Z</kbd> <i id="desktopNoiseLabel">미끼</i></span>
-        <span><kbd>X</kbd> <i id="desktopCloneLabel">분신 저장</i></span>
+        <span><kbd>Z</kbd> <i id="desktopNoiseLabel">경비원 도발</i></span>
+        <span><kbd>X</kbd> <i id="desktopCloneLabel">분신 만들기</i></span>
       </footer>
     </main>
 
-    <script type="module" src="./game.js?v=0.9.0"></script>
+    <script type="module" src="./game.js?v=0.10.0"></script>
   </body>
 </html>
