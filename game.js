@@ -1,5 +1,7 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.10.0";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.11.0";
 import {
+  DEFAULT_PROFILE,
+  LEGACY_DEFAULT_PROFILE_NAME,
   PROFILE_COLORS,
   PROFILE_FACES,
   STEALTH_GRADE_THRESHOLDS,
@@ -8,10 +10,14 @@ import {
   getWorldLeaderboard,
   getWorldTopRecords,
   normalizeProfile,
-} from "./profile-utils.js?v=0.10.0";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.10.0";
-import { MAX_CLONES, canCreateClone, canEscape } from "./game-rules.js?v=0.10.0";
-import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.10.0";
+  normalizeProfileName,
+  prepareStoredProfile,
+  serializeStoredProfile,
+} from "./profile-utils.js?v=0.11.0";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.11.0";
+import { MAX_CLONES, canCreateClone, canEscape } from "./game-rules.js?v=0.11.0";
+import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.11.0";
+import { placeCanvasLabel, rectFullyInsideBounds } from "./label-layout.js?v=0.11.0";
 import {
   PROJECTILE_PROFILES,
   createProjectileLaunch,
@@ -19,7 +25,7 @@ import {
   projectileElapsedMs,
   projectileFlightPosition,
   shouldRemoveProjectile,
-} from "./projectile-utils.js?v=0.10.0";
+} from "./projectile-utils.js?v=0.11.0";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -96,6 +102,7 @@ const THEMES = {
   castle: { id: "castle", location: "거울 성", floor: "#e0d2f0", glow: "#f0e7fa", grid: "#aa90ca", wall: "#705aa3", wallDark: "#3f356b", accent: "#e2598d" },
   vault: { id: "vault", location: "왕실 금고", floor: "#f0dca9", glow: "#fff0c7", grid: "#c49b52", wall: "#9b623f", wallDark: "#593827", accent: "#a84558" },
   clocktower: { id: "clocktower", location: "자정 시계탑", floor: "#d8c9c2", glow: "#efe1d9", grid: "#a98b8b", wall: "#78394e", wallDark: "#452335", accent: "#bc3159" },
+  inferno: { id: "inferno", location: "불타는 지옥 성채", floor: "#3a2026", glow: "#57262b", grid: "#8f3930", wall: "#8b2d24", wallDark: "#351419", accent: "#ff7138" },
 };
 
 const KEY_TYPES = Object.freeze({
@@ -107,6 +114,7 @@ const KEY_TYPES = Object.freeze({
   mirrorOpal: Object.freeze({ nameKey: "treasureMirrorOpal", value: 800, palette: Object.freeze({ main: "#65e1cb", dark: "#347f9c", light: "#e4fff7", accent: "#b869ee" }) }),
   crownEmerald: Object.freeze({ nameKey: "treasureCrownEmerald", value: 900, palette: Object.freeze({ main: "#39cf7a", dark: "#187b52", light: "#d7ffe4", accent: "#ffc857" }) }),
   midnightStar: Object.freeze({ nameKey: "treasureMidnightStar", value: 1200, palette: Object.freeze({ main: "#8f63f2", dark: "#452b9e", light: "#ede2ff", accent: "#ffd166" }) }),
+  inferno: Object.freeze({ nameKey: "treasureInferno", value: 1500, palette: Object.freeze({ main: "#ff7138", dark: "#9e241e", light: "#fff0bd", accent: "#ffd166" }) }),
 });
 
 const ITEM_TYPES = Object.freeze({
@@ -142,7 +150,7 @@ const levels = [
   {
     code: "02",
     difficulty: 2,
-    parEchoes: 0,
+    parEchoes: 1,
     theme: THEMES.warehouse,
     music: { label: "FACTORY BEAT", groove: "industrial", bpm: 105, root: 110, type: "square", steps: [0, null, 0, 7, null, 3, 0, null, 10, 7, null, 3, 0, null] },
     start: { x: 100, y: 580 },
@@ -150,9 +158,13 @@ const levels = [
     keyType: KEY_TYPES.amber,
     items: [{ id: "02-shield", type: "shield", x: 250, y: 160 }],
     exit: { x: 1060, y: 585 },
-    plates: [],
-    doors: [],
-    walls: [{ x: 380, y: 210, w: 450, h: 260 }],
+    plates: [{ id: "A", x: 250, y: 145, r: 30 }],
+    doors: [{ x: 930, y: 260, w: 30, h: 180, plateId: "A" }],
+    walls: [
+      { x: 380, y: 210, w: 450, h: 260 },
+      { x: 930, y: 55, w: 30, h: 205 },
+      { x: 930, y: 440, w: 30, h: 205 },
+    ],
     guards: [{
       type: "listener", x: 880, y: 530,
       waypoints: [{ x: 880, y: 530 }, { x: 1060, y: 530 }, { x: 1060, y: 330 }, { x: 880, y: 330 }],
@@ -298,9 +310,50 @@ const levels = [
     ],
     guards: [
       { type: "watcher", name: "시계탑 궁수", x: 170, y: 250, speed: 72, range: 245, hearing: 0, fov: 1.5, detectRate: 1.15, waypoints: [{ x: 170, y: 250 }, { x: 300, y: 250 }, { x: 300, y: 360 }, { x: 170, y: 360 }] },
-      { type: "listener", name: "청음병", x: 500, y: 330, speed: 92, range: 215, hearing: 720, fov: 1.05, detectRate: 1.05, waypoints: [{ x: 500, y: 330 }, { x: 640, y: 330 }, { x: 640, y: 450 }, { x: 430, y: 450 }, { x: 430, y: 330 }] },
-      { type: "chaser", x: 550, y: 160, speed: 150, range: 185, hearing: 420, fov: 0.76, detectRate: 1.3, zone: { x: 430, y: 80, w: 175, h: 300 }, waypoints: [{ x: 550, y: 160 }, { x: 575, y: 160 }, { x: 575, y: 300 }, { x: 470, y: 300 }, { x: 470, y: 160 }] },
-      { type: "elite", name: "딱걸이 대장", boss: true, x: 940, y: 390, speed: 118, range: 280, hearing: 520, fov: 1.35, detectRate: 1.25, zone: { x: 820, y: 80, w: 300, h: 500 }, waypoints: [{ x: 940, y: 390 }, { x: 1080, y: 390 }, { x: 1080, y: 180 }, { x: 850, y: 180 }, { x: 850, y: 390 }] },
+      { type: "listener", name: "청음병", x: 500, y: 380, speed: 92, range: 215, hearing: 720, fov: 1.05, detectRate: 1.05, waypoints: [{ x: 500, y: 380 }, { x: 640, y: 380 }, { x: 640, y: 480 }, { x: 430, y: 480 }, { x: 430, y: 380 }] },
+      { type: "chaser", x: 550, y: 155, speed: 150, range: 185, hearing: 420, fov: 0.76, detectRate: 1.3, zone: { x: 430, y: 80, w: 175, h: 300 }, waypoints: [{ x: 550, y: 155 }, { x: 575, y: 155 }, { x: 575, y: 260 }, { x: 470, y: 260 }, { x: 470, y: 155 }] },
+      { type: "elite", name: "자정 경비대장", boss: true, x: 940, y: 390, speed: 118, range: 280, hearing: 520, fov: 1.35, detectRate: 1.25, zone: { x: 820, y: 80, w: 300, h: 500 }, waypoints: [{ x: 940, y: 390 }, { x: 1080, y: 390 }, { x: 1080, y: 180 }, { x: 850, y: 180 }, { x: 850, y: 390 }] },
+    ],
+  },
+  {
+    code: "09",
+    difficulty: 9,
+    parEchoes: 3,
+    theme: THEMES.inferno,
+    music: { label: "INFERNO LAST RUN", groove: "boss", bpm: 210, root: 82, type: "sawtooth", steps: [0, 0, 3, 7, 10, 7, 3, 0, -2, 0, 3, 7, 12, 10, 7, 3, 0, 5, 8, 12, 15, 12, 8, 5, 3, 0, -2, null] },
+    start: { x: 100, y: 585 },
+    key: { x: 1030, y: 110 },
+    keyType: KEY_TYPES.inferno,
+    items: [
+      { id: "09-time", type: "time", x: 250, y: 565 },
+      { id: "09-shield", type: "shield", x: 735, y: 565 },
+      { id: "09-bonus", type: "bonus", x: 1010, y: 570, score: 1000 },
+    ],
+    exit: { x: 1080, y: 585 },
+    plates: [
+      { id: "A", x: 200, y: 115, r: 30 },
+      { id: "B", x: 460, y: 115, r: 30 },
+      { id: "C", x: 740, y: 115, r: 30 },
+    ],
+    doors: [
+      { x: 320, y: 440, w: 30, h: 140, plateId: "A" },
+      { x: 600, y: 120, w: 30, h: 150, plateId: "B" },
+      { x: 880, y: 260, w: 30, h: 180, plateId: "C" },
+    ],
+    walls: [
+      { x: 320, y: 55, w: 30, h: 385 }, { x: 320, y: 580, w: 30, h: 65 },
+      { x: 600, y: 55, w: 30, h: 65 }, { x: 600, y: 270, w: 30, h: 375 },
+      { x: 880, y: 55, w: 30, h: 205 }, { x: 880, y: 440, w: 30, h: 205 },
+      { x: 395, y: 330, w: 140, h: 34 },
+      { x: 675, y: 390, w: 135, h: 34 },
+      { x: 955, y: 300, w: 105, h: 34 },
+    ],
+    guards: [
+      { type: "sleepy", name: "지옥 문지기", x: 190, y: 350, speed: 82, range: 190, fov: 0.9, detectRate: 1.0, zone: { x: 82, y: 72, w: 220, h: 556 }, waypoints: [{ x: 190, y: 350 }, { x: 270, y: 350 }, { x: 270, y: 520 }, { x: 130, y: 520 }] },
+      { type: "listener", name: "불꽃 청음병", x: 455, y: 415, speed: 104, range: 220, hearing: 760, fov: 1.1, detectRate: 1.15, zone: { x: 365, y: 72, w: 220, h: 556 }, waypoints: [{ x: 455, y: 415 }, { x: 550, y: 415 }, { x: 550, y: 540 }, { x: 390, y: 540 }] },
+      { type: "scanner", name: "용암 탐조등", x: 735, y: 335, angle: 2.2, range: 270, fov: 0.82, detectRate: 0.95, rotationSpeed: 0.6, zone: { x: 645, y: 72, w: 220, h: 556 }, waypoints: [{ x: 735, y: 335 }] },
+      { type: "chaser", name: "화염 그물병", x: 800, y: 520, speed: 150, range: 195, hearing: 600, fov: 0.82, detectRate: 1.35, zone: { x: 645, y: 72, w: 220, h: 556 }, waypoints: [{ x: 800, y: 520 }, { x: 840, y: 520 }, { x: 840, y: 210 }, { x: 680, y: 210 }] },
+      { type: "elite", name: "지옥 경비대장", boss: true, x: 1015, y: 395, speed: 128, range: 305, hearing: 620, fov: 1.45, detectRate: 1.4, zone: { x: 925, y: 72, w: 193, h: 556 }, waypoints: [{ x: 1015, y: 395 }, { x: 1080, y: 395 }, { x: 1080, y: 190 }, { x: 950, y: 190 }] },
     ],
   },
 ];
@@ -336,7 +389,10 @@ let settings = {
   visualSound: savedSettings.visualSound !== false,
   muted: Boolean(savedSettings.muted),
 };
-let profile = normalizeProfile(readLocalJson(STORAGE_KEYS.profile, {}));
+const storedProfileResult = prepareStoredProfile(readLocalJson(STORAGE_KEYS.profile, {}));
+let profile = storedProfileResult.profile;
+let profileNameCustomized = storedProfileResult.nameCustomized;
+if (storedProfileResult.changed) writeLocalJson(STORAGE_KEYS.profile, storedProfileResult.storage);
 let gameStats = {
   plays: 0,
   clears: 0,
@@ -346,6 +402,15 @@ let gameStats = {
 };
 let completionRecords = readLocalJson(STORAGE_KEYS.records, []);
 if (!Array.isArray(completionRecords)) completionRecords = [];
+if (!profileNameCustomized) {
+  let migratedRecordName = false;
+  completionRecords = completionRecords.map((record) => {
+    if (!record || typeof record !== "object" || record.name !== LEGACY_DEFAULT_PROFILE_NAME) return record;
+    migratedRecordName = true;
+    return { ...record, name: DEFAULT_PROFILE.name };
+  });
+  if (migratedRecordName) writeLocalJson(STORAGE_KEYS.records, completionRecords);
+}
 let lastClearResult = null;
 let soundCaptionRemaining = 0;
 
@@ -430,6 +495,10 @@ let doorTutorialShown = false;
 let unlocked = Math.max(1, Math.min(levels.length, Number(localStorage.getItem("loopHeistUnlocked")) || 1));
 let completed = Math.max(0, Math.min(levels.length, Number(localStorage.getItem("loopHeistCompleted")) || 0));
 unlocked = Math.max(unlocked, Math.min(levels.length, completed + 1));
+// Local-only stage selector for repeatable screenshots and play QA. It never unlocks the public build.
+const localQaStage = ["127.0.0.1", "localhost"].includes(location.hostname)
+  ? Number(new URLSearchParams(location.search).get("qaStage"))
+  : 0;
 let moveTarget = null;
 let moveTargetStuckFor = 0;
 let lastAlertValue = -1;
@@ -439,6 +508,8 @@ let goFlashRemaining = 0;
 let canvasSizeDirty = true;
 let cameraX = W / 2;
 let renderView = { scale: 1, offsetX: 0, offsetY: 0, zoomed: false };
+let canvasLabels = [];
+let canvasLabelRects = [];
 const stickInput = { x: 0, y: 0, magnitude: 0, pointerId: null };
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
@@ -703,8 +774,10 @@ function showProfileOverlay() {
   }));
   nameInput.addEventListener("input", refreshPreview);
   document.querySelector("#saveProfile").addEventListener("click", () => {
+    const previousName = profile.name;
     profile = normalizeProfile({ name: nameInput.value, color: selectedColor, face: selectedFace });
-    writeLocalJson(STORAGE_KEYS.profile, profile);
+    profileNameCustomized ||= profile.name !== previousName;
+    writeLocalJson(STORAGE_KEYS.profile, serializeStoredProfile(profile, profileNameCustomized));
     showMenu(levelIndex);
   });
   document.querySelector("#closeProfile").addEventListener("click", () => showMenu(levelIndex));
@@ -733,10 +806,10 @@ function showSettingsOverlay() {
         <p class="game-guide__items">${t(settings.language, "guideItems")}</p>
         <p class="game-guide__note">${t(settings.language, "guideScore", { value: level.parEchoes })}</p>
       </section>
-      <label class="setting-row" for="languageSetting"><span><b>${t(settings.language, "language")}</b><small>한국어 · English · 日本語</small></span><select class="toy-select" id="languageSetting">${languageOptions}</select></label>
+      <label class="setting-row" for="languageSetting"><span><b>${t(settings.language, "language")}</b><small>한국어 / English / 日本語</small></span><select class="toy-select" id="languageSetting">${languageOptions}</select></label>
       <label class="setting-row" for="visualSoundSetting"><span><b>${t(settings.language, "visualSound")}</b><small>${t(settings.language, "visualSoundHelp")}</small></span><input id="visualSoundSetting" type="checkbox" ${settings.visualSound ? "checked" : ""} /></label>
       <label class="setting-row" for="soundSetting"><span><b>${t(settings.language, "sound")}</b><small>${t(settings.language, "gameSound")}</small></span><input id="soundSetting" type="checkbox" ${muted ? "" : "checked"} /></label>
-      <div class="caption-demo" aria-hidden="true"><span>♪ ${t(settings.language, "sound")}</span><strong>[→ ${t(settings.language, "guardHeard")}]</strong></div>
+      <div class="caption-demo" aria-hidden="true"><span>♪ ${t(settings.language, "sound")}</span><strong>[${t(settings.language, "guardHeard")}]</strong></div>
       <div class="dialog-actions"><button class="toy-button toy-button--primary" id="saveSettings" type="button">${t(settings.language, "save")}</button><button class="toy-button" id="closeSettings" type="button">${t(settings.language, "back")}</button></div>
     </section>
   `, "settings");
@@ -762,16 +835,16 @@ function showRecordsOverlay(selectedIndex = levelIndex) {
   const leaderboard = getWorldLeaderboard(completionRecords, recordLevel.code, null, 5);
   const tabs = levels.map((item, index) => `<button class="record-stage-tab ${index === selectedIndex ? "is-current" : ""}" type="button" data-record-stage="${index}" ${index >= unlocked ? "disabled" : ""} aria-label="${t(settings.language, "stage")} ${Number(item.code)}${index >= unlocked ? `, ${t(settings.language, "locked")}` : ""}">${item.code}</button>`).join("");
   const rows = leaderboard.top.length ? leaderboard.top.map((record, index) => `
-    <li class="ranking-row ${record.name === profile.name ? "is-me" : ""}"><b>${index + 1}</b>${avatarMarkup(record, "toy-avatar--tiny")}<span class="ranking-player"><b>${escapeHtml(record.name || t(settings.language, "profile"))}</b><small>${t(settings.language, "radarHitsShort")} ${record.radarHits ?? "-"} · ${t(settings.language, "retriesShort")} ${record.retries ?? "-"} · ${t(settings.language, "echoName")} ${record.echoes}</small></span><strong>${formatRecordScore(record)}</strong></li>
+    <li class="ranking-row ${record.name === profile.name ? "is-me" : ""}"><b>${index + 1}</b>${avatarMarkup(record, "toy-avatar--tiny")}<span class="ranking-player"><b>${escapeHtml(normalizeProfileName(record.name))}</b><small>${t(settings.language, "radarHitsShort")} ${record.radarHits ?? "-"}, ${t(settings.language, "retriesShort")} ${record.retries ?? "-"}, ${t(settings.language, "echoName")} ${record.echoes}</small></span><strong>${formatRecordScore(record)}</strong></li>
   `).join("") : `<li class="empty-record">${t(settings.language, "noRecord")}</li>`;
   setOverlay(`
     <section class="panel toy-dialog records-dialog" aria-labelledby="overlayTitle">
-      <div class="records-heading"><div><h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "records")} · ${t(settings.language, "ranking")}</h2></div>${avatarMarkup(profile)}</div>
+      <div class="records-heading"><div><h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "records")} / ${t(settings.language, "ranking")}</h2></div>${avatarMarkup(profile)}</div>
       <div class="stat-strip"><div><span>${t(settings.language, "plays")}</span><b>${gameStats.plays}</b></div><div><span>${t(settings.language, "clears")}</span><b>${gameStats.clears}</b></div><div><span>${t(settings.language, "catches")}</span><b>${gameStats.catches}</b></div><div><span>${t(settings.language, "clone")}</span><b>${gameStats.echoes}</b></div></div>
       <nav class="record-stage-tabs" aria-label="${t(settings.language, "stage")}">${tabs}</nav>
-      <div class="ranking-title"><span>${t(settings.language, "deviceRanking")}</span><b>${t(settings.language, "stage")} ${Number(recordLevel.code)} · ${escapeHtml(recordStage.title)}</b></div>
+      <div class="ranking-title"><span>${t(settings.language, "deviceRanking")}</span><b>${t(settings.language, "stage")} ${Number(recordLevel.code)}: ${escapeHtml(recordStage.title)}</b></div>
       <ol class="ranking-list">${rows}</ol>
-      <p class="ranking-note">${t(settings.language, "records")} · ${leaderboard.total}</p>
+      <p class="ranking-note">${t(settings.language, "records")} ${leaderboard.total}</p>
       <button class="records-reset" id="resetRecords" type="button">${t(settings.language, "resetRecords")}</button>
       <div class="dialog-actions"><button class="toy-button toy-button--primary" id="playFromRecords" type="button">${t(settings.language, "play")}</button><button class="toy-button" id="closeRecords" type="button">${t(settings.language, "back")}</button></div>
     </section>
@@ -815,13 +888,13 @@ function showMenu(selectedIndex = null) {
   applyTheme();
   updateStaticTranslations();
   updateHud();
-  ui.stageName.textContent = `${t(settings.language, "stage")} ${Number(level.code)} · ${stageCopy.title}`;
+  ui.stageName.textContent = `${t(settings.language, "stage")} ${Number(level.code)}: ${stageCopy.title}`;
   ui.objective.textContent = stageCopy.cue;
   const stageNodes = levels.map((item, index) => {
     const locked = index >= unlocked;
     const cleared = index < completed;
     const stage = localizedStage(item);
-    const status = cleared ? "✓" : index === levelIndex ? t(settings.language, "now") : locked ? "·" : t(settings.language, "next");
+    const status = cleared ? "✓" : index === levelIndex ? t(settings.language, "now") : locked ? t(settings.language, "locked") : t(settings.language, "next");
     return `
       <button class="world-node ${cleared ? "is-cleared" : ""} ${index === levelIndex ? "is-current" : ""} ${index === levels.length - 1 ? "is-boss" : ""}" type="button" data-stage-select="${index}" ${locked ? "disabled" : ""} aria-label="${t(settings.language, "stage")} ${Number(item.code)} ${stage.title}, ${locked ? t(settings.language, "locked") : status}">
         <span class="world-node__coin" aria-hidden="true">${locked ? "?" : cleared ? "✓" : item.code}</span>
@@ -831,7 +904,7 @@ function showMenu(selectedIndex = null) {
   setOverlay(`
     <section class="panel arcade-menu toy-menu" aria-labelledby="overlayTitle">
       <header class="toy-menu__top">
-        <button class="profile-chip" id="profileAction" data-action="profile" type="button" aria-label="${t(settings.language, "profile")} · ${escapeHtml(profile.name)}">${avatarMarkup(profile)}<span><b>${escapeHtml(profile.name)}</b><small>${t(settings.language, "profile")}</small></span></button>
+        <button class="profile-chip" id="profileAction" data-action="profile" type="button" aria-label="${t(settings.language, "profile")}: ${escapeHtml(profile.name)}">${avatarMarkup(profile)}<span><b>${escapeHtml(profile.name)}</b><small>${t(settings.language, "profile")}</small></span></button>
         <div class="arcade-logo toy-logo">
           <h1 id="overlayTitle" data-dialog-title tabindex="-1">${escapeHtml(t(settings.language, "gameTitle"))}</h1>
         </div>
@@ -840,16 +913,16 @@ function showMenu(selectedIndex = null) {
       <div class="arcade-stage-card toy-stage-card" data-stage="${level.code}" data-theme="${level.theme.id}">
         <div class="arcade-stage-info">
           <div class="stage-heading">
-            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.10.0" alt="" aria-hidden="true"></span>
+            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.11.0" alt="" aria-hidden="true"></span>
             <div class="stage-heading__copy"><span class="arcade-rule">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length}</span><h2 class="stage-title"><span class="stage-title__local">${escapeHtml(stageCopy.title)}</span></h2><p class="stage-summary">${escapeHtml(stageCopy.rule)}</p></div>
-            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.10.0" alt="" aria-hidden="true"></span>` : ""}
+            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.11.0" alt="" aria-hidden="true"></span>` : ""}
           </div>
           <div class="stage-mission"><span>${t(settings.language, "currentGoal")}</span><b>${escapeHtml(stageCopy.cue)}</b></div>
           <div class="arcade-stats"><span>${t(settings.language, "difficulty")} ${level.difficulty}/${levels.length}</span><span>${t(settings.language, "best")} ${best ? formatRecordScore(best) : "--"}</span></div>
           <button class="arcade-play toy-button toy-button--primary" id="quickStart" data-action="play" type="button"><span aria-hidden="true">▶</span> ${t(settings.language, "play")}</button>
         </div>
       </div>
-      <nav class="world-map toy-rail" aria-label="${t(settings.language, "stage")}">${stageNodes}</nav>
+      <nav class="world-map toy-rail" style="--stage-count:${levels.length}" aria-label="${t(settings.language, "stage")}">${stageNodes}</nav>
     </section>
   `, "menu");
   announce(`${t(settings.language, "stage")} ${Number(level.code)} ${stageCopy.title}. ${stageCopy.cue}`);
@@ -940,7 +1013,7 @@ function startLevel(index = levelIndex) {
   hideOverlay();
   updateHud();
   window.scrollTo({ top: 0, behavior: "instant" });
-  ui.stageName.textContent = `${t(settings.language, "stage")} ${Number(level.code)} · ${stageCopy.title}`;
+  ui.stageName.textContent = `${t(settings.language, "stage")} ${Number(level.code)}: ${stageCopy.title}`;
   ui.objective.textContent = stageCopy.cue;
   announce(`${t(settings.language, "stage")} ${Number(level.code)}. ${stageCopy.cue}`);
 }
@@ -1203,7 +1276,7 @@ function collectStageItem(item) {
   if (scoreValue > 0) {
     itemBonusScore += scoreValue;
     const pointsLabel = t(settings.language, "itemPoints", { value: scoreValue.toLocaleString(settings.language) });
-    effectLabel = effectLabel ? `${effectLabel} · ${pointsLabel}` : pointsLabel;
+    effectLabel = effectLabel ? `${effectLabel}, ${pointsLabel}` : pointsLabel;
   }
   sound("timeBonus");
   flash = reducedMotionQuery.matches ? 0 : 0.42;
@@ -1780,7 +1853,7 @@ function showCompleteOverlay() {
     <span class="grade-rule ${grade === result.run.grade ? "is-current" : ""}">${grade} ${Number(min).toLocaleString(settings.language)}+</span>
   `).join("");
   const comparison = result.newBest
-    ? `<p class="clear-record is-best"><b>${t(settings.language, "newBest")}</b>${result.previousBest ? `<span>${t(settings.language, "previousBest")} ${formatRecordScore(result.previousBest)} → ${formatRecordScore(result.run)}</span>` : ""}</p>`
+    ? `<p class="clear-record is-best"><b>${t(settings.language, "newBest")}</b>${result.previousBest ? `<span>${t(settings.language, "previousBest")}: ${formatRecordScore(result.previousBest)}, ${formatRecordScore(result.run)}</span>` : ""}</p>`
     : `<p class="clear-record"><b>${t(settings.language, "deviceRank")} #${result.rank || "-"}</b><span>${t(settings.language, "best")} ${formatRecordScore(getWorldTopRecords(completionRecords, level.code, 1)[0] || result.run)}</span></p>`;
   setOverlay(`
     <section class="panel arcade-clear toy-clear" aria-labelledby="overlayTitle">
@@ -1804,7 +1877,7 @@ function showCompleteOverlay() {
         <div><span>${t(settings.language, "itemBonusScore")}</span><b>+${Number(result.run.itemBonus || 0).toLocaleString(settings.language)}</b></div>
       </div>
       ${comparison}
-      <p class="arcade-unlock">${isLast ? t(settings.language, "allClear") : `${t(settings.language, "stageOpen")} · ${Number(nextLevel.code)} ${escapeHtml(nextCopy.title)}`}</p>
+      <p class="arcade-unlock">${isLast ? t(settings.language, "allClear") : `${t(settings.language, "stageOpen")}: ${Number(nextLevel.code)} ${escapeHtml(nextCopy.title)}`}</p>
       <div class="arcade-clear__actions">
         <button class="arcade-play toy-button toy-button--primary" id="nextAction" type="button">${isLast ? t(settings.language, "stageMap") : `${t(settings.language, "nextStage")} ▶`}</button>
         <button class="pixel-button toy-button" id="retryAction" type="button">${t(settings.language, "retry")}</button>
@@ -2006,6 +2079,7 @@ const CANVAS_ART_PALETTES = {
   casino: { floor: "#dfc5e6", floorAlt: "#cda8d8", floorMark: "#a87fb5", wallTop: "#7b426d", wallSide: "#472642", wallHighlight: "#b477a4", decor: "#7d4e83" },
   lab: { floor: "#cde8d8", floorAlt: "#b5d9ca", floorMark: "#83b29f", wallTop: "#3e8178", wallSide: "#24534f", wallHighlight: "#80b8aa", decor: "#4d8d82" },
   penthouse: { floor: "#dfc9bd", floorAlt: "#d2b3a6", floorMark: "#a97f76", wallTop: "#78394e", wallSide: "#452335", wallHighlight: "#b86b7f", decor: "#8d5960" },
+  inferno: { floor: "#3a2026", floorAlt: "#4b2428", floorMark: "#8f3930", wallTop: "#9b3528", wallSide: "#351419", wallHighlight: "#ff8b45", decor: "#d8512f" },
 };
 
 const ACTOR_COLORS = {
@@ -2191,6 +2265,20 @@ function drawThemeDecor(now) {
       ctx.fillRect(x - 8 + tick * 4, y - 8, 16 - tick * 4, 16);
       ctx.fillStyle = palette.decor;
     });
+  } else if (theme.id === "inferno") {
+    for (let x = 94, index = 0; x < W - 80; x += 92, index += 1) {
+      const flame = 8 + ((frame + index) % 3) * 4;
+      ctx.fillRect(x, 608 - flame, 8, flame);
+      ctx.fillRect(x - 5, 608 - Math.floor(flame * 0.55), 18, 5);
+    }
+    [[150, 200], [450, 510], [720, 210], [1015, 520]].forEach(([x, y], index) => {
+      const pulse = (frame + index) % 4;
+      ctx.fillRect(x - 24, y - 3, 48, 6);
+      ctx.fillRect(x - 3, y - 24, 6, 48);
+      ctx.fillStyle = pulse < 2 ? "#ffb347" : palette.floorAlt;
+      ctx.fillRect(x - 6, y - 6, 12, 12);
+      ctx.fillStyle = palette.decor;
+    });
   }
   ctx.restore();
 }
@@ -2219,6 +2307,111 @@ function drawWalls() {
   }
 }
 
+const CANVAS_LABEL_BOUNDS = Object.freeze({ x: 64, y: 62, w: W - 128, h: H - 118 });
+
+function canvasLabelFontSize(requestedCssPixels = 12) {
+  return clamp(worldUnitsForCssPixels(requestedCssPixels), 11, 16);
+}
+
+function canvasLabelObstacles() {
+  return [
+    ...level.walls,
+    ...level.doors,
+    ...level.plates.map((plate) => ({ x: plate.x - 25, y: plate.y - 25, w: 50, h: 50 })),
+    ...(level.items || [])
+      .filter((item) => !collectedItemIds.has(item.id))
+      .map((item) => ({ x: item.x - 22, y: item.y - 22, w: 44, h: 48 })),
+    ...(keyCollected ? [] : [{ x: level.key.x - 25, y: level.key.y - 18, w: 50, h: 38 }]),
+    { x: level.exit.x - 21, y: level.exit.y - 23, w: 42, h: 52 },
+  ];
+}
+
+function queueCanvasLabel({
+  text,
+  objectRect,
+  preferredSides = ["bottom", "top", "right", "left"],
+  color = "#ffffff",
+  background = ACTOR_COLORS.outline,
+  border = null,
+  fontSize = canvasLabelFontSize(),
+  minWidth = worldUnitsForCssPixels(58),
+  maxWidth = worldUnitsForCssPixels(132),
+  horizontalPadding = worldUnitsForCssPixels(8),
+  verticalPadding = worldUnitsForCssPixels(5),
+  gap = worldUnitsForCssPixels(6),
+  obstacles = canvasLabelObstacles(),
+}) {
+  const labelText = String(text ?? "");
+  ctx.save();
+  ctx.font = `900 ${fontSize}px "Galmuri11", "Malgun Gothic", sans-serif`;
+  const measuredWidth = ctx.measureText(labelText).width;
+  ctx.restore();
+  const width = clamp(measuredWidth + horizontalPadding * 2, minWidth, maxWidth);
+  const height = Math.max(fontSize * 1.45 + verticalPadding * 2, worldUnitsForCssPixels(23));
+  const placement = placeCanvasLabel({
+    objectRect,
+    width,
+    height,
+    bounds: CANVAS_LABEL_BOUNDS,
+    obstacles,
+    occupied: canvasLabelRects,
+    preferredSides,
+    gap,
+    clearance: worldUnitsForCssPixels(2),
+  });
+  canvasLabels.push({
+    text: labelText,
+    x: placement.x,
+    y: placement.y,
+    width,
+    height,
+    fontSize,
+    color,
+    background,
+    border,
+    rect: placement.rect,
+  });
+  canvasLabelRects.push(placement.rect);
+}
+
+function drawCanvasLabels() {
+  const viewportInset = worldUnitsForCssPixels(3);
+  const visibleBounds = {
+    x: -renderView.offsetX / Math.max(renderView.scale, 0.001),
+    y: -renderView.offsetY / Math.max(renderView.scale, 0.001),
+    w: canvas.width / Math.max(renderView.scale, 0.001),
+    h: canvas.height / Math.max(renderView.scale, 0.001),
+  };
+  for (const label of canvasLabels) {
+    // Portrait play uses a horizontal tracking camera. Hiding an off-camera
+    // plaque as one unit prevents clipped black fragments at either edge.
+    if (renderView.zoomed && !rectFullyInsideBounds(label.rect, visibleBounds, viewportInset)) continue;
+    const left = Math.round(label.x - label.width / 2);
+    const top = Math.round(label.y - label.height / 2);
+    const width = Math.round(label.width);
+    const height = Math.round(label.height);
+    ctx.save();
+    ctx.shadowColor = "rgba(4,9,20,.24)";
+    ctx.shadowBlur = worldUnitsForCssPixels(2);
+    ctx.shadowOffsetY = worldUnitsForCssPixels(1);
+    ctx.fillStyle = label.background;
+    ctx.fillRect(left, top, width, height);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    if (label.border) {
+      ctx.strokeStyle = label.border;
+      ctx.lineWidth = Math.max(1, worldUnitsForCssPixels(1));
+      ctx.strokeRect(left + 0.5, top + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
+    }
+    ctx.fillStyle = label.color;
+    ctx.font = `900 ${label.fontSize}px "Galmuri11", "Malgun Gothic", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label.text, label.x, label.y + label.fontSize * 0.04, label.width - worldUnitsForCssPixels(8));
+    ctx.restore();
+  }
+}
+
 function drawPlatesAndDoors(now) {
   level.plates.forEach((plate, plateIndex) => {
     const active = plateStates.get(plate.id);
@@ -2237,20 +2430,15 @@ function drawPlatesAndDoors(now) {
     ctx.fillStyle = active ? "#173a46" : "#d5eef4";
     ctx.fillRect(-7, -3, 4, 6);
     ctx.fillRect(3, -3, 4, 6);
-    ctx.fillStyle = active ? "#d9fff2" : "#6a9baa";
-    const plateLabel = t(settings.language, "echoPlate", { value: plateIndex + 1 });
-    const plateFontSize = Math.max(10, worldUnitsForCssPixels(11));
-    const plateLabelHeight = worldUnitsForCssPixels(18);
-    const plateLabelY = visualRadius + worldUnitsForCssPixels(13);
-    ctx.font = `900 ${plateFontSize}px "Galmuri11", "Malgun Gothic", sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const plateLabelWidth = ctx.measureText(plateLabel).width + worldUnitsForCssPixels(12);
-    ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(-plateLabelWidth / 2, plateLabelY - plateLabelHeight / 2, plateLabelWidth, plateLabelHeight);
-    ctx.fillStyle = active ? "#d9fff2" : "#ffffff";
-    ctx.fillText(plateLabel, 0, plateLabelY);
     ctx.restore();
+    queueCanvasLabel({
+      text: t(settings.language, "echoPlate", { value: plateIndex + 1 }),
+      objectRect: { x: plate.x - visualRadius, y: plate.y - visualRadius, w: visualRadius * 2, h: visualRadius * 2 },
+      preferredSides: ["bottom", "top", "right", "left"],
+      color: active ? "#d9fff2" : "#ffffff",
+      border: active ? "#7bffd4" : "#377b8f",
+      minWidth: worldUnitsForCssPixels(66),
+    });
   });
 
   level.doors.forEach((door, index) => {
@@ -2274,20 +2462,18 @@ function drawPlatesAndDoors(now) {
       }
     }
     ctx.shadowBlur = 0;
+    ctx.restore();
     const doorNumber = Math.max(1, level.plates.findIndex((plate) => plate.id === door.plateId) + 1);
     const doorLabel = t(settings.language, open ? "doorOpenLabel" : "doorLockedLabel", { value: doorNumber });
-    const doorFontSize = Math.max(10, worldUnitsForCssPixels(11));
-    const doorLabelHeight = worldUnitsForCssPixels(18);
-    const doorLabelY = door.y - worldUnitsForCssPixels(12);
-    ctx.font = `900 ${doorFontSize}px "Galmuri11", "Malgun Gothic", sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const doorLabelWidth = ctx.measureText(doorLabel).width + worldUnitsForCssPixels(12);
-    ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(door.x + door.w / 2 - doorLabelWidth / 2, doorLabelY - doorLabelHeight / 2, doorLabelWidth, doorLabelHeight);
-    ctx.fillStyle = open ? "#d9fff2" : "#ffd5df";
-    ctx.fillText(doorLabel, door.x + door.w / 2, doorLabelY);
-    ctx.restore();
+    const verticalDoor = door.h > door.w;
+    queueCanvasLabel({
+      text: doorLabel,
+      objectRect: door,
+      preferredSides: verticalDoor ? ["right", "left", "top", "bottom"] : ["top", "bottom", "right", "left"],
+      color: open ? "#d9fff2" : "#ffd5df",
+      border: open ? "#7bffd4" : "#ff4e6f",
+      minWidth: worldUnitsForCssPixels(70),
+    });
   });
 }
 
@@ -2328,16 +2514,15 @@ function drawItems(now) {
       ctx.fillStyle = type.light;
       ctx.fillRect(-4, -9, 5, 8);
     }
-    const label = t(settings.language, type.nameKey);
-    ctx.font = '900 9px "Galmuri11", "Malgun Gothic", sans-serif';
-    const labelWidth = clamp(Math.ceil(ctx.measureText(label).width) + 14, 62, 110);
-    ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(-labelWidth / 2, 28, labelWidth, 16);
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, 0, 36);
     ctx.restore();
+    queueCanvasLabel({
+      text: t(settings.language, type.nameKey),
+      objectRect: { x: item.x - 20, y: item.y + bob - 21, w: 40, h: 45 },
+      preferredSides: ["bottom", "top", "right", "left"],
+      color: type.light,
+      border: type.main,
+      minWidth: worldUnitsForCssPixels(64),
+    });
   }
 }
 
@@ -2387,15 +2572,14 @@ function drawKey(now) {
   ctx.fillRect(21 - shimmer, -1, 2, 6);
   ctx.restore();
 
-  const label = t(settings.language, keyType.nameKey);
-  ctx.font = '900 8px "Galmuri11", "Malgun Gothic", sans-serif';
-  const labelWidth = clamp(Math.ceil(ctx.measureText(label).width) + 8, 48, 100);
-  ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(level.key.x - labelWidth / 2, level.key.y + 20, labelWidth, 13);
-  ctx.fillStyle = palette.light;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, level.key.x, level.key.y + 26.5);
+  queueCanvasLabel({
+    text: t(settings.language, keyType.nameKey),
+    objectRect: { x: level.key.x - 24, y: level.key.y + bob - 17, w: 48, h: 35 },
+    preferredSides: ["bottom", "left", "right", "top"],
+    color: palette.light,
+    border: palette.main,
+    minWidth: worldUnitsForCssPixels(62),
+  });
 }
 
 function drawExit(now) {
@@ -2452,13 +2636,14 @@ function drawExit(now) {
   }
   ctx.restore();
 
-  ctx.fillStyle = ACTOR_COLORS.outline;
-  ctx.fillRect(level.exit.x - 34, level.exit.y + 27, 68, 14);
-  ctx.fillStyle = active ? "#d8fff0" : "#ffe2bd";
-  ctx.font = '900 9px "Galmuri11", "Malgun Gothic", sans-serif';
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(active ? t(settings.language, "escapeNow") : t(settings.language, "lockedExit"), level.exit.x, level.exit.y + 34);
+  queueCanvasLabel({
+    text: active ? t(settings.language, "escapeNow") : t(settings.language, "lockedExit"),
+    objectRect: { x: level.exit.x - 20, y: level.exit.y - 23, w: 40, h: 50 },
+    preferredSides: ["bottom", "left", "top", "right"],
+    color: active ? "#d8fff0" : "#ffe2bd",
+    border: active ? ACTOR_COLORS.exit : "#c27a43",
+    minWidth: worldUnitsForCssPixels(72),
+  });
 }
 
 function drawVisionCones() {
@@ -2720,41 +2905,62 @@ function drawEchoTrail(echo, index) {
   ctx.restore();
 }
 
-function drawGuardStatusLabel(guard, unit, alerted, labelY) {
-  const labelFontSize = Math.max(guard.boss ? 14 : 11, Math.min(28, worldUnitsForCssPixels(11)));
-  ctx.save();
-  ctx.font = `900 ${labelFontSize}px "Galmuri11", "Malgun Gothic", sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+function drawGuardStatusLabel(guard, unit, alerted, objectRect) {
+  const labelFontSize = Math.max(guard.boss ? 14 : 12, Math.min(18, worldUnitsForCssPixels(12)));
   if (guard.boss) {
-    const width = Math.max(72, ctx.measureText(`${t(settings.language, "boss")}·Z`).width + 16);
-    ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(guard.x - width / 2, labelY - labelFontSize * 0.7, width, labelFontSize * 1.4);
-    ctx.fillStyle = "#fff1b6";
-    ctx.fillText(`${t(settings.language, "boss")}·Z`, guard.x, labelY);
+    queueCanvasLabel({
+      text: `${t(settings.language, "boss")} Z`,
+      objectRect,
+      preferredSides: ["top", "right", "left", "bottom"],
+      color: "#fff1b6",
+      border: ACTOR_COLORS.bossGold,
+      fontSize: labelFontSize,
+      minWidth: worldUnitsForCssPixels(72),
+      maxWidth: worldUnitsForCssPixels(108),
+      horizontalPadding: worldUnitsForCssPixels(8),
+    });
   } else if (alerted) {
-    const size = Math.max(18, labelFontSize * 1.35);
-    ctx.fillStyle = ACTOR_COLORS.danger;
-    ctx.fillRect(guard.x - size / 2, labelY - size / 2, size, size);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText("!", guard.x, labelY + 1);
+    queueCanvasLabel({
+      text: "!",
+      objectRect,
+      preferredSides: ["top", "right", "left", "bottom"],
+      color: "#ffffff",
+      background: ACTOR_COLORS.danger,
+      border: "#ffffff",
+      fontSize: labelFontSize,
+      minWidth: worldUnitsForCssPixels(27),
+      maxWidth: worldUnitsForCssPixels(34),
+      horizontalPadding: worldUnitsForCssPixels(5),
+    });
   } else {
     const marker = { sleepy: "●", listener: "♪", watcher: "➶", scanner: "☀", chaser: "⊕", elite: "★" }[guard.type] || guard.symbol;
-    const size = Math.max(18, labelFontSize * 1.35);
-    ctx.fillStyle = ACTOR_COLORS.guardDark;
-    ctx.fillRect(guard.x - size / 2, labelY - size / 2, size, size);
-    ctx.fillStyle = "#fff0d0";
-    ctx.fillText(marker, guard.x, labelY + 1);
+    queueCanvasLabel({
+      text: marker,
+      objectRect,
+      preferredSides: ["top", "right", "left", "bottom"],
+      color: "#fff0d0",
+      background: ACTOR_COLORS.guardDark,
+      border: guard.color,
+      fontSize: labelFontSize,
+      minWidth: worldUnitsForCssPixels(27),
+      maxWidth: worldUnitsForCssPixels(34),
+      horizontalPadding: worldUnitsForCssPixels(5),
+    });
   }
   if (loopElapsed < guard.confusedUntil) {
-    const confusedY = labelY - (guard.boss ? 26 : 22);
-    const size = Math.max(20, labelFontSize * 1.45);
-    ctx.fillStyle = ACTOR_COLORS.echoDark;
-    ctx.fillRect(guard.x - size / 2, confusedY - size / 2, size, size);
-    ctx.fillStyle = "#d8fbff";
-    ctx.fillText("?", guard.x, confusedY + 1);
+    queueCanvasLabel({
+      text: "?",
+      objectRect,
+      preferredSides: ["top", "left", "right", "bottom"],
+      color: "#d8fbff",
+      background: ACTOR_COLORS.echoDark,
+      border: "#62e7ff",
+      fontSize: labelFontSize,
+      minWidth: worldUnitsForCssPixels(27),
+      maxWidth: worldUnitsForCssPixels(34),
+      horizontalPadding: worldUnitsForCssPixels(5),
+    });
   }
-  ctx.restore();
 }
 
 function drawGuard(guard, now) {
@@ -2790,7 +2996,7 @@ function drawGuard(guard, now) {
       ctx.strokeRect(x - size * 0.43, y - size * 0.45, size * 0.86, size * 0.88);
     }
     ctx.restore();
-    drawGuardStatusLabel(guard, unit, alerted, guard.y - size * 0.56);
+    drawGuardStatusLabel(guard, unit, alerted, { x: x - size / 2, y: y - size / 2, w: size, h: size });
     return;
   }
   ctx.save();
@@ -2868,7 +3074,12 @@ function drawGuard(guard, now) {
   ctx.strokeRect(-7 * unit, -7 * unit, 14 * unit, 14 * unit);
   ctx.restore();
 
-  drawGuardStatusLabel(guard, unit, alerted, guard.y - unit * (guard.boss ? 15 : 11));
+  drawGuardStatusLabel(guard, unit, alerted, {
+    x: guard.x - unit * (guard.boss ? 12 : 10),
+    y: guard.y - unit * (guard.boss ? 14 : 12),
+    w: unit * (guard.boss ? 24 : 20),
+    h: unit * (guard.boss ? 26 : 23),
+  });
 }
 
 function drawNoise() {
@@ -2997,6 +3208,8 @@ function render(now) {
   ctx.save();
   ctx.setTransform(renderView.scale, 0, 0, renderView.scale, renderView.offsetX, renderView.offsetY);
   ctx.translate(shakeX, shakeY);
+  canvasLabels = [];
+  canvasLabelRects = [];
   drawGrid();
   drawThemeDecor(visualNow);
   drawVisionCones();
@@ -3038,6 +3251,7 @@ function render(now) {
     ctx.fillStyle = "rgba(255,30,65,.13)";
     ctx.fillRect(0, 0, W, H);
   }
+  drawCanvasLabels();
   ctx.restore();
   drawArcadeOverlay();
 }
@@ -3105,7 +3319,7 @@ function toggleMute() {
   settings.muted = muted;
   saveSettings();
   updateHud();
-  showToast(`${t(settings.language, "sound")} · ${t(settings.language, muted ? "off" : "on")}`, 900);
+  showToast(`${t(settings.language, "sound")}: ${t(settings.language, muted ? "off" : "on")}`, 900);
 }
 
 function runGameAction(action) {
@@ -3240,6 +3454,6 @@ window.__LOOP_HEIST_DEBUG__ = {
   }),
 };
 
-showMenu();
+showMenu(Number.isInteger(localQaStage) && localQaStage >= 1 && localQaStage <= levels.length ? localQaStage - 1 : undefined);
 updateHud();
 requestAnimationFrame(frame);

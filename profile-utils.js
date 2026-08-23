@@ -9,6 +9,8 @@ export const PROFILE_COLORS = Object.freeze([
 
 export const PROFILE_FACES = Object.freeze(["•ᴗ•", "^‿^", ">ᴗ<", "◉‿◉", "ᵔᴥᵔ", "¬‿¬"]);
 export const PROFILE_NAME_MAX_LENGTH = 12;
+export const PROFILE_STORAGE_VERSION = 2;
+export const LEGACY_DEFAULT_PROFILE_NAME = "지금이";
 export const STEALTH_GRADE_THRESHOLDS = Object.freeze([
   Object.freeze({ grade: "S", min: 9000 }),
   Object.freeze({ grade: "A", min: 7500 }),
@@ -16,7 +18,7 @@ export const STEALTH_GRADE_THRESHOLDS = Object.freeze([
   Object.freeze({ grade: "C", min: 0 }),
 ]);
 export const DEFAULT_PROFILE = Object.freeze({
-  name: "지금이",
+  name: "전투오리",
   color: PROFILE_COLORS[0],
   face: PROFILE_FACES[0],
 });
@@ -59,6 +61,43 @@ export function normalizeProfile(profile = {}) {
     name: normalizeProfileName(candidate.name),
     color: normalizeProfileColor(candidate.color),
     face: normalizeProfileFace(candidate.face),
+  };
+}
+
+export function serializeStoredProfile(profile = {}, nameCustomized = true) {
+  return {
+    ...normalizeProfile(profile),
+    storageVersion: PROFILE_STORAGE_VERSION,
+    nameCustomized: Boolean(nameCustomized),
+  };
+}
+
+export function prepareStoredProfile(storedProfile = {}) {
+  const candidate = storedProfile && typeof storedProfile === "object" ? storedProfile : {};
+  const storedName = sanitizeName(candidate.name);
+  const explicitlyCustomized = candidate.nameCustomized === true;
+  const inferredCustomized = Boolean(storedName)
+    && storedName !== LEGACY_DEFAULT_PROFILE_NAME
+    && storedName !== DEFAULT_PROFILE.name;
+  const nameCustomized = explicitlyCustomized || inferredCustomized;
+  const migratedLegacyName = storedName === LEGACY_DEFAULT_PROFILE_NAME && !explicitlyCustomized;
+  const profile = normalizeProfile({
+    ...candidate,
+    name: migratedLegacyName ? DEFAULT_PROFILE.name : candidate.name,
+  });
+  const storage = serializeStoredProfile(profile, nameCustomized);
+  const storageCurrent = candidate.storageVersion === PROFILE_STORAGE_VERSION
+    && candidate.nameCustomized === storage.nameCustomized
+    && candidate.name === storage.name
+    && candidate.color === storage.color
+    && candidate.face === storage.face;
+
+  return {
+    profile,
+    storage,
+    nameCustomized,
+    migratedLegacyName,
+    changed: !storageCurrent,
   };
 }
 

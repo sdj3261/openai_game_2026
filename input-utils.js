@@ -29,9 +29,9 @@ export function describeAnalogStick(x, y, magnitude, language = "ko") {
     ? String(language).slice(0, 2).toLowerCase()
     : "ko";
   const labels = {
-    ko: { center: "중앙 · 정지", right: "오른쪽", left: "왼쪽", down: "아래", up: "위", move: "이동" },
-    en: { center: "Center · stopped", right: "right", left: "left", down: "down", up: "up", move: "moving" },
-    ja: { center: "中央 · 停止", right: "右", left: "左", down: "下", up: "上", move: "移動" },
+    ko: { center: "중앙, 정지", right: "오른쪽", left: "왼쪽", down: "아래", up: "위", move: "이동" },
+    en: { center: "Center, stopped", right: "right", left: "left", down: "down", up: "up", move: "moving" },
+    ja: { center: "中央、停止", right: "右", left: "左", down: "下", up: "上", move: "移動" },
   }[code];
   if (magnitude <= 0.01) return labels.center;
   const nx = x / magnitude;
@@ -39,5 +39,5 @@ export function describeAnalogStick(x, y, magnitude, language = "ko") {
   const horizontal = nx > 0.28 ? labels.right : nx < -0.28 ? labels.left : "";
   const vertical = ny > 0.28 ? labels.down : ny < -0.28 ? labels.up : "";
   const direction = [vertical, horizontal].filter(Boolean).join(" ") || labels.move;
-  return `${direction} · ${Math.round(magnitude * 100)}%`;
+  return `${direction} ${Math.round(magnitude * 100)}%`;
 }

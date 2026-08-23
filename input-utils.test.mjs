@@ -51,13 +51,13 @@ test("projectAnalogStick honors custom geometry and deadzone", () => {
 });
 
 test("describeAnalogStick returns concise Korean direction feedback", () => {
-  assert.equal(describeAnalogStick(0, 0, 0), "중앙 · 정지");
-  assert.equal(describeAnalogStick(0.1, 0, 0.2), "오른쪽 · 20%");
-  assert.equal(describeAnalogStick(0.8, -0.8, 0.9), "위 오른쪽 · 90%");
-  assert.equal(describeAnalogStick(-0.7, 0.7, 0.54), "아래 왼쪽 · 54%");
+  assert.equal(describeAnalogStick(0, 0, 0), "중앙, 정지");
+  assert.equal(describeAnalogStick(0.1, 0, 0.2), "오른쪽 20%");
+  assert.equal(describeAnalogStick(0.8, -0.8, 0.9), "위 오른쪽 90%");
+  assert.equal(describeAnalogStick(-0.7, 0.7, 0.54), "아래 왼쪽 54%");
 });
 
 test("describeAnalogStick localizes assistive feedback", () => {
-  assert.equal(describeAnalogStick(0, 0, 0, "en-US"), "Center · stopped");
-  assert.equal(describeAnalogStick(0.5, -0.5, 0.7, "ja"), "上 右 · 70%");
+  assert.equal(describeAnalogStick(0, 0, 0, "en-US"), "Center, stopped");
+  assert.equal(describeAnalogStick(0.5, -0.5, 0.7, "ja"), "上 右 70%");
 });

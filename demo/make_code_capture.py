@@ -31,15 +31,15 @@ def main() -> None:
     draw.text((62, 158), "사람이 재미를 결정하고, Codex가 빠르게 만들고 검증했습니다.", font=font(24), fill=yellow)
 
     panels = [
-        (58, 218, 610, 592, "GAME LOGIC · game.js", clip_lines(ROOT / "game.js", ("calculateStealthScore", "canEscape", "visionPolygon", "saveAndRewind"))),
+        (58, 218, 610, 592, "GAME LOGIC  game.js", clip_lines(ROOT / "game.js", ("calculateStealthScore", "canEscape", "visionPolygon", "saveAndRewind"))),
         (638, 218, 1222, 592, "AUTOMATED QA", [
-            "PASS  input-utils.test.mjs · 입력 판정",
-            "PASS  profile-utils.test.mjs · 점수/랭킹",
-            "PASS  i18n.test.mjs · 한국어/영어/일본어",
-            "PASS  smoke-test.mjs · 실제 브라우저 실행",
-            "PASS  PC 1280×720 · Mobile 390×844",
+            "PASS  input-utils.test.mjs  입력 판정",
+            "PASS  profile-utils.test.mjs  점수와 랭킹",
+            "PASS  i18n.test.mjs  한국어와 영어와 일본어",
+            "PASS  level-layout.test.mjs  9개 스테이지 경로",
+            "PASS  PC 1280×720  Mobile 390×844",
             "PASS  레이더 시각 영역 = 충돌 판정",
-            "PASS  Agent Sprite Forge · 캐릭터/보스",
+            "PASS  전체 자동 테스트 53개",
         ]),
     ]
     for x1, y1, x2, y2, title, lines in panels:
@@ -51,7 +51,7 @@ def main() -> None:
             y += 38
 
     draw.rounded_rectangle((58, 620, 1222, 680), 16, fill="#162c45", outline=cyan, width=2)
-    draw.text((86, 636), "DESIGN → IMPLEMENT → PLAYTEST → FIX → AUTOMATED TEST → DEPLOY", font=font(22, True), fill=white)
+    draw.text((86, 636), "기획, 구현, 플레이 테스트, 수정, 자동 테스트, 배포", font=font(22, True), fill=white)
     image.save(OUT, optimize=True)
     print(OUT)
 

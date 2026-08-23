@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   DEFAULT_PROFILE,
+  LEGACY_DEFAULT_PROFILE_NAME,
   PROFILE_COLORS,
   PROFILE_FACES,
   PROFILE_NAME_MAX_LENGTH,
+  PROFILE_STORAGE_VERSION,
   STEALTH_GRADE_THRESHOLDS,
   calculateStealthScore,
   compareCompletionRecords,
@@ -17,6 +19,8 @@ import {
   normalizeProfileColor,
   normalizeProfileFace,
   normalizeProfileName,
+  prepareStoredProfile,
+  serializeStoredProfile,
   sortCompletionRecords,
 } from "./profile-utils.js";
 
@@ -27,6 +31,7 @@ test("profile option constants are immutable and have safe defaults", () => {
   assert.deepEqual(STEALTH_GRADE_THRESHOLDS.map(({ grade, min }) => [grade, min]), [["S", 9000], ["A", 7500], ["B", 6000], ["C", 0]]);
   assert.ok(PROFILE_COLORS.includes(DEFAULT_PROFILE.color));
   assert.ok(PROFILE_FACES.includes(DEFAULT_PROFILE.face));
+  assert.equal(DEFAULT_PROFILE.name, "전투오리");
   assert.equal(new Set(PROFILE_COLORS).size, PROFILE_COLORS.length);
   assert.equal(new Set(PROFILE_FACES).size, PROFILE_FACES.length);
 });
@@ -35,7 +40,7 @@ test("normalizeProfileName normalizes width, whitespace, unsafe punctuation, and
   assert.equal(normalizeProfileName("  ＬＯＯＰ   도둑! <3  "), "LOOP 도둑 3");
   assert.equal(normalizeProfileName("abcdefghijklmnop"), "abcdefghijkl".slice(0, PROFILE_NAME_MAX_LENGTH));
   assert.equal(normalizeProfileName("<script>"), "script");
-  assert.equal(normalizeProfileName("💣💣", "지금이"), "지금이");
+  assert.equal(normalizeProfileName("💣💣"), "전투오리");
 });
 
 test("profile color and face values are restricted to exported options", () => {
@@ -52,6 +57,54 @@ test("normalizeProfile returns only normalized profile fields", () => {
     face: PROFILE_FACES[2],
   });
   assert.deepEqual(normalizeProfile(null), DEFAULT_PROFILE);
+});
+
+test("stored profile migration only replaces the uncustomized legacy default name", () => {
+  const legacy = prepareStoredProfile({
+    name: LEGACY_DEFAULT_PROFILE_NAME,
+    color: PROFILE_COLORS[2],
+    face: PROFILE_FACES[3],
+  });
+  assert.deepEqual(legacy.profile, {
+    name: "전투오리",
+    color: PROFILE_COLORS[2],
+    face: PROFILE_FACES[3],
+  });
+  assert.equal(legacy.nameCustomized, false);
+  assert.equal(legacy.migratedLegacyName, true);
+  assert.equal(legacy.changed, true);
+
+  const custom = prepareStoredProfile({ name: "오리대장", color: PROFILE_COLORS[1], face: PROFILE_FACES[1] });
+  assert.equal(custom.profile.name, "오리대장");
+  assert.equal(custom.nameCustomized, true);
+  assert.equal(custom.migratedLegacyName, false);
+
+  const explicitLegacyName = prepareStoredProfile(serializeStoredProfile({
+    name: LEGACY_DEFAULT_PROFILE_NAME,
+    color: PROFILE_COLORS[4],
+    face: PROFILE_FACES[4],
+  }, true));
+  assert.equal(explicitLegacyName.profile.name, LEGACY_DEFAULT_PROFILE_NAME);
+  assert.equal(explicitLegacyName.nameCustomized, true);
+  assert.equal(explicitLegacyName.migratedLegacyName, false);
+  assert.equal(explicitLegacyName.changed, false);
+  assert.equal(explicitLegacyName.storage.storageVersion, PROFILE_STORAGE_VERSION);
+});
+
+test("stored profile serialization keeps a stable default-name migration marker", () => {
+  const fresh = prepareStoredProfile(null);
+  assert.deepEqual(fresh.profile, DEFAULT_PROFILE);
+  assert.equal(fresh.nameCustomized, false);
+  assert.deepEqual(fresh.storage, {
+    ...DEFAULT_PROFILE,
+    storageVersion: PROFILE_STORAGE_VERSION,
+    nameCustomized: false,
+  });
+
+  const roundTrip = prepareStoredProfile(fresh.storage);
+  assert.equal(roundTrip.changed, false);
+  assert.equal(roundTrip.migratedLegacyName, false);
+  assert.deepEqual(roundTrip.profile, DEFAULT_PROFILE);
 });
 
 test("calculateStealthScore returns a perfect score and an inspectable breakdown", () => {
