@@ -39,7 +39,7 @@ def main() -> None:
             "PASS  level-layout.test.mjs  9개 스테이지 경로",
             "PASS  PC 1280×720  Mobile 390×844",
             "PASS  레이더 시각 영역 = 충돌 판정",
-            "PASS  전체 자동 테스트 53개",
+            "PASS  전체 자동 테스트 57개",
         ]),
     ]
     for x1, y1, x2, y2, title, lines in panels:

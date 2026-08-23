@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 
-const expectedVersion = "0.11.0";
+const expectedVersion = "0.12.0";
 const port = 43000 + Math.floor(Math.random() * 1000);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let serverOutput = "";
@@ -109,6 +109,15 @@ try {
   assert(spriteAssets.includes(`ASSET_VERSION = "${expectedVersion}"`) && spriteAssets.includes("DUCK_SPRITES") && spriteAssets.includes("GUARD_ROLE_BY_TYPE") && spriteAssets.includes("toy-guards"), "Versioned duck and toy-guard sprite catalog is missing");
   assert(projectileUtils.includes("PROJECTILE_PROFILES") && projectileUtils.includes("firstSweptCollision") && projectileUtils.includes("projectileFlightPosition") && projectileUtils.includes("projectileElapsedMs"), "Projectile physics exports are missing");
   assert(gameRules.includes("MAX_CLONES = 10") && gameRules.includes("export function canEscape") && gameRules.includes("candidate.hasKey === true"), "Key-only exit or ten-clone rule is missing");
+  assert(
+    gameRules.includes("export function stageNineBlackoutOpacity")
+      && gameRules.includes("export function stageNineEventShakeIntensity")
+      && gameRules.includes("export function stageNineShakeOffset")
+      && game.includes('triggerStageNineShake("door-open")')
+      && game.includes('triggerStageNineShake("boss-alert")')
+      && game.includes("drawStageNineBlackout();"),
+    "Stage-nine deterministic blackout or event-shake integration is missing",
+  );
   assert(game.includes("spawnedAtMs: clock") && game.includes("projectileElapsedMs(loopElapsed, projectile.spawnedAtMs)"), "Projectile absolute-clock integration is missing");
   assert(game.includes("const actors = [...echoes, player]"), "Clone-first projectile collision ordering is missing");
   assert(game.includes("if (canEscape({ hasKey: player.hasKey })) completeLevel();") && !game.includes("requiredNoiseEchoes") && !game.includes("requiredEchoes"), "Exit still has a hidden clone or noise requirement");

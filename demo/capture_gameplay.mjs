@@ -9,7 +9,7 @@ const { chromium } = require("playwright");
 const ROOT = resolve(import.meta.dirname, "..");
 const CAPTURES = resolve(import.meta.dirname, ".work", "captures");
 const BASE_URL = process.env.GAME_URL || "http://127.0.0.1:4173/";
-const FPS = 6;
+const FPS = Number(process.env.CAPTURE_FPS || 6);
 const ONLY = new Set((process.env.CAPTURE_ONLY || "").split(",").map((item) => item.trim()).filter(Boolean));
 const wants = (name) => ONLY.size === 0 || ONLY.has(name);
 
@@ -30,11 +30,11 @@ const executablePath = await firstExisting([
 
 const browser = await chromium.launch({ headless: true, executablePath });
 
-async function newPage(viewport = { width: 1280, height: 720 }) {
+async function newPage(viewport = { width: 1280, height: 720 }, reducedMotion = "reduce") {
   const context = await browser.newContext({
     viewport,
     deviceScaleFactor: 1,
-    reducedMotion: "reduce",
+    reducedMotion,
   });
   const page = await context.newPage();
   page.on("console", (message) => {
@@ -44,7 +44,7 @@ async function newPage(viewport = { width: 1280, height: 720 }) {
 }
 
 async function openStage(page, stage) {
-  await page.goto(`${BASE_URL}?qaStage=${stage}&demo=011`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE_URL}?qaStage=${stage}&demo=012`, { waitUntil: "networkidle" });
   await page.locator("#quickStart").waitFor({ state: "visible" });
 }
 
@@ -64,15 +64,44 @@ async function record(page, name, durationMs, actions = []) {
   await rm(directory, { recursive: true, force: true });
   await mkdir(directory, { recursive: true });
   const queue = [...actions].sort((a, b) => a.at - b.at);
-  let nextAction = 0;
   const started = Date.now();
+  const keyEvents = queue.filter((action) => action.keyEvent).map((action) => ({
+    at: action.at,
+    ...action.keyEvent,
+  }));
+  await page.evaluate((events) => {
+    const dispatch = (type, code) => {
+      document.dispatchEvent(new KeyboardEvent(type, {
+        code,
+        key: code,
+        bubbles: true,
+        cancelable: true,
+      }));
+    };
+    for (const event of events) {
+      window.setTimeout(() => {
+        if (event.type === "press") {
+          dispatch("keydown", event.code);
+          window.setTimeout(() => dispatch("keyup", event.code), 32);
+        } else {
+          dispatch(event.type, event.code);
+        }
+      }, event.at);
+    }
+  }, keyEvents);
+  let actionError = null;
+  const actionTask = (async () => {
+    for (const action of queue.filter((item) => !item.keyEvent)) {
+      const waitMs = started + action.at - Date.now();
+      if (waitMs > 0) await page.waitForTimeout(waitMs);
+      await action.run(page);
+    }
+  })().catch((error) => {
+    actionError = error;
+  });
   let frame = 0;
   while (Date.now() - started < durationMs) {
-    const elapsed = Date.now() - started;
-    while (nextAction < queue.length && queue[nextAction].at <= elapsed) {
-      await queue[nextAction].run(page);
-      nextAction += 1;
-    }
+    if (actionError) throw actionError;
     await page.screenshot({
       path: resolve(directory, `frame-${String(frame).padStart(4, "0")}.png`),
       animations: "disabled",
@@ -81,6 +110,8 @@ async function record(page, name, durationMs, actions = []) {
     const target = started + frame * (1000 / FPS);
     if (target > Date.now()) await page.waitForTimeout(target - Date.now());
   }
+  await actionTask;
+  if (actionError) throw actionError;
   await page.keyboard.up("ArrowUp").catch(() => {});
   await page.keyboard.up("ArrowDown").catch(() => {});
   await page.keyboard.up("ArrowLeft").catch(() => {});
@@ -88,9 +119,208 @@ async function record(page, name, durationMs, actions = []) {
   console.log(`${name}: ${frame} frames`);
 }
 
-const down = (at, key) => ({ at, run: (page) => page.keyboard.down(key) });
-const up = (at, key) => ({ at, run: (page) => page.keyboard.up(key) });
-const press = (at, key) => ({ at, run: (page) => page.keyboard.press(key) });
+async function hold(page, key, durationMs) {
+  await page.keyboard.down(key);
+  await page.waitForTimeout(durationMs);
+  await page.keyboard.up(key);
+}
+
+async function stage9Snapshot(page, label, predicate) {
+  const snapshot = await page.evaluate(() => window.__LOOP_HEIST_DEBUG__.snapshot());
+  if (!predicate(snapshot)) {
+    throw new Error(`Stage 9 ${label} 검증 실패: ${JSON.stringify(snapshot)}`);
+  }
+  console.log(`Stage 9 ${label}:`, JSON.stringify({
+    state: snapshot.state,
+    loopNumber: snapshot.loopNumber,
+    loopElapsed: Math.round(snapshot.loopElapsed),
+    loopLimit: snapshot.loopLimit,
+    echoes: snapshot.echoes.length,
+    plates: snapshot.plates,
+    doors: snapshot.doors,
+    key: snapshot.key.collected,
+    retries: snapshot.scoreRun.retries,
+  }));
+  return snapshot;
+}
+
+async function prepareStage9Echoes(page) {
+  // A: 첫 분신은 발판 A에 멈춘다.
+  await hold(page, "ArrowUp", 1810);
+  await hold(page, "ArrowRight", 385);
+  await stage9Snapshot(page, "A 준비", (snapshot) => snapshot.plates.A && snapshot.doors[0]);
+  await page.keyboard.press("KeyX");
+  await page.waitForTimeout(30);
+
+  // B: 경비를 부르고 첫 문을 지나 발판 B에 멈춘다.
+  await hold(page, "ArrowUp", 140);
+  await page.keyboard.press("KeyZ");
+  await hold(page, "ArrowDown", 230);
+  await hold(page, "ArrowRight", 690);
+  await page.waitForTimeout(3950);
+  await hold(page, "ArrowUp", 230);
+  await hold(page, "ArrowRight", 330);
+  await hold(page, "ArrowUp", 1700);
+  await hold(page, "ArrowRight", 230);
+  await stage9Snapshot(page, "A와 B 준비", (snapshot) => (
+    snapshot.plates.A && snapshot.plates.B && snapshot.doors[0] && snapshot.doors[1]
+    && snapshot.scoreRun.retries === 0
+  ));
+  await page.keyboard.press("KeyX");
+  await page.waitForTimeout(30);
+
+  // C: 시간 태엽을 챙겨 남은 두 문을 지나 발판 C에 멈춘다.
+  await hold(page, "ArrowUp", 140);
+  await page.keyboard.press("KeyZ");
+  await hold(page, "ArrowDown", 270);
+  await hold(page, "ArrowRight", 385);
+  await page.waitForTimeout(4300);
+  await hold(page, "ArrowUp", 270);
+  await hold(page, "ArrowRight", 640);
+  await hold(page, "ArrowUp", 1300);
+  await hold(page, "ArrowRight", 1100);
+  await hold(page, "ArrowUp", 340);
+  await hold(page, "ArrowRight", 300);
+  await stage9Snapshot(page, "A B C 준비", (snapshot) => (
+    Object.values(snapshot.plates).every(Boolean) && snapshot.doors.every(Boolean)
+    && snapshot.loopLimit === 13000 && snapshot.scoreRun.retries === 0
+  ));
+  await page.keyboard.press("KeyX");
+  await page.waitForTimeout(30);
+  await stage9Snapshot(page, "세 분신 저장", (snapshot) => (
+    snapshot.loopNumber === 4 && snapshot.echoes.length === 3 && snapshot.scoreRun.retries === 0
+  ));
+}
+
+async function recordStage9Final(page) {
+  const name = "clip-stage9";
+  const directory = resolve(CAPTURES, name);
+  await rm(directory, { recursive: true, force: true });
+  await mkdir(directory, { recursive: true });
+
+  // 화면 캡처가 느려져도 입력은 실제 게임 시계를 따른다.
+  // 이렇게 하면 세 분신과 현재 캐릭터가 같은 규칙으로 재생된다.
+  await page.evaluate(() => {
+    const canvas = document.querySelector("#game");
+    const baseTime = window.__LOOP_HEIST_DEBUG__.snapshot().loopElapsed;
+    const events = [
+      [0, "down", "ArrowUp"], [140, "up", "ArrowUp"], [140, "press", "KeyZ"],
+      [140, "down", "ArrowDown"], [410, "up", "ArrowDown"],
+      [410, "down", "ArrowRight"], [795, "up", "ArrowRight"],
+      [5095, "down", "ArrowUp"], [5365, "up", "ArrowUp"],
+      [5365, "down", "ArrowRight"], [6005, "up", "ArrowRight"],
+      [6005, "down", "ArrowUp"], [7305, "up", "ArrowUp"],
+      [7305, "down", "ArrowRight"], [8405, "up", "ArrowRight"],
+      [8405, "down", "ArrowDown"], [8665, "up", "ArrowDown"],
+      [8665, "down", "ArrowRight"], [9765, "up", "ArrowRight"],
+    ];
+    let index = 0;
+    const dispatchKey = (type, code) => {
+      document.dispatchEvent(new KeyboardEvent(type, {
+        code, key: code, bubbles: true, cancelable: true,
+      }));
+    };
+    const clickWorld = (x, y) => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 1,
+        pointerType: "mouse",
+        isPrimary: true,
+        button: 0,
+        clientX: rect.left + rect.width * x / 1200,
+        clientY: rect.top + rect.height * y / 700,
+      }));
+    };
+    let exitPhase = 0;
+    let exitPhaseStarted = 0;
+    const tick = () => {
+      const snapshot = window.__LOOP_HEIST_DEBUG__.snapshot();
+      const time = snapshot.loopElapsed - baseTime;
+      while (index < events.length && time >= events[index][0]) {
+        const [, type, value, y] = events[index];
+        if (type === "click") clickWorld(value, y);
+        else if (type === "press") {
+          dispatchKey("keydown", value);
+          window.setTimeout(() => dispatchKey("keyup", value), 32);
+        } else {
+          dispatchKey(type === "down" ? "keydown" : "keyup", value);
+        }
+        index += 1;
+      }
+      if (exitPhase === 0 && time >= 9950) {
+        clickWorld(1002, 110);
+        exitPhase = 1;
+      } else if (exitPhase === 1 && snapshot.key.collected) {
+        clickWorld(930, 270);
+        exitPhase = 2;
+        exitPhaseStarted = time;
+      } else if (exitPhase === 2 && time >= exitPhaseStarted + 700) {
+        clickWorld(930, 350);
+        exitPhase = 3;
+        exitPhaseStarted = time;
+      } else if (exitPhase === 3 && time >= exitPhaseStarted + 330) {
+        clickWorld(1080, 585);
+        exitPhase = 4;
+      }
+      if (snapshot.state === "playing" && (index < events.length || exitPhase < 4)) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+  const started = Date.now();
+  const maxDurationMs = 26000;
+  let frame = 0;
+  let completeAt = null;
+  let doorsVerified = false;
+  let keyVerified = false;
+  while (Date.now() - started < maxDurationMs) {
+    await page.screenshot({
+      path: resolve(directory, `frame-${String(frame).padStart(4, "0")}.png`),
+      animations: "disabled",
+    });
+    frame += 1;
+    const snapshot = await page.evaluate(() => window.__LOOP_HEIST_DEBUG__.snapshot());
+    if (!doorsVerified && snapshot.loopElapsed >= 9300) {
+      if (
+        snapshot.echoes.length !== 3
+        || !Object.values(snapshot.plates).every(Boolean)
+        || !snapshot.doors.every(Boolean)
+        || snapshot.scoreRun.retries !== 0
+      ) {
+        throw new Error(`Stage 9 세 문 개방 검증 실패: ${JSON.stringify(snapshot)}`);
+      }
+      doorsVerified = true;
+      console.log("Stage 9 세 문 개방:", JSON.stringify({
+        t: Math.round(snapshot.loopElapsed), echoes: snapshot.echoes.length,
+        plates: snapshot.plates, doors: snapshot.doors,
+      }));
+    }
+    if (!keyVerified && snapshot.key.collected) {
+      keyVerified = true;
+      console.log("Stage 9 열쇠 획득:", Math.round(snapshot.loopElapsed));
+    }
+    if (snapshot.state === "complete") {
+      if (completeAt === null) completeAt = Date.now();
+      if (Date.now() - completeAt >= 1200) break;
+    }
+    const target = started + frame * (1000 / FPS);
+    if (target > Date.now()) await page.waitForTimeout(target - Date.now());
+  }
+  const final = await stage9Snapshot(page, "최종 탈출", (snapshot) => (
+    snapshot.state === "complete" && snapshot.echoes.length === 3
+    && snapshot.key.collected && snapshot.scoreRun.retries === 0
+  ));
+  if (!doorsVerified || !keyVerified || !final.doors.every(Boolean)) {
+    throw new Error(`Stage 9 최종 상태 검증 실패: ${JSON.stringify(final)}`);
+  }
+  console.log(`${name}: ${frame} frames`);
+}
+
+const down = (at, key) => ({ at, keyEvent: { type: "keydown", code: key } });
+const up = (at, key) => ({ at, keyEvent: { type: "keyup", code: key } });
+const press = (at, key) => ({ at, keyEvent: { type: "press", code: key } });
 
 await mkdir(CAPTURES, { recursive: true });
 
@@ -213,17 +443,12 @@ if (wants("mobile")) {
 }
 
 if (wants("stage9")) {
-  const { context, page } = await newPage();
+  const { context, page } = await newPage({ width: 1280, height: 720 }, "no-preference");
   await openStage(page, 9);
   await record(page, "clip-stage9-menu", 4200);
   await startStage(page);
-  await record(page, "clip-stage9", 9200, [
-    down(250, "ArrowRight"), up(900, "ArrowRight"), press(1080, "KeyX"),
-    down(1350, "ArrowUp"), up(1850, "ArrowUp"), press(2050, "KeyX"),
-    down(2300, "ArrowRight"), down(2300, "ArrowUp"), up(2800, "ArrowRight"), up(2800, "ArrowUp"), press(3000, "KeyX"),
-    press(3500, "KeyZ"), down(3900, "ArrowRight"), up(5400, "ArrowRight"),
-    down(5550, "ArrowUp"), up(7000, "ArrowUp"),
-  ]);
+  await prepareStage9Echoes(page);
+  await recordStage9Final(page);
   await context.close();
 }
 

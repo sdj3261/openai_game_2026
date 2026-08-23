@@ -68,7 +68,7 @@ test("stages 01 through 09 provide title, cue, and rule in all languages", () =>
   assert.equal(t("ja", "stage.07.title"), "王室金庫");
   assert.equal(t("ko", "stage.09.title"), "불타는 지옥 성채");
   assert.equal(t("ko", "stage.02.cue"), "발판에서 X로 분신을 만든 뒤 열린 문 너머의 열쇠를 찾으세요");
-  assert.equal(t("ko", "stage.09.cue"), "분신 3개로 문 3개를 열고 지옥불 열쇠를 찾아 탈출하세요");
+  assert.equal(t("ko", "stage.09.cue"), "지옥 태엽 +5초를 챙기고 분신 3개로 문 3개를 열어 탈출하세요");
 });
 
 test("t falls back to Korean for unsupported languages and to the key when missing", () => {

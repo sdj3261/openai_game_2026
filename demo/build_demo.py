@@ -477,22 +477,25 @@ def render_frame(scenes: list[dict], schedule: list[dict], spans: list[dict], to
     muted = (190, 207, 225, 255)
     navy = (9, 19, 33, 235)
 
-    # Keep the title readable even when the underlying game menu contains a
-    # large heading in the same area.
-    rounded(draw, (42, 30, 825, 215), 24, (9, 19, 33, 198), (74, 102, 133, 220), 2)
-    draw.text((64, 48), scene["eyebrow"], font=FONT_SMALL, fill=cyan)
+    # The Stage 9 gameplay uses the upper half for all three switches. Its
+    # second visual therefore keeps only the small scene counter so the real
+    # switch and door states remain visible.
+    show_scene_header = not (scene["id"] == "boss" and visual_index == 1)
+    if show_scene_header:
+        rounded(draw, (42, 30, 825, 215), 24, (9, 19, 33, 198), (74, 102, 133, 220), 2)
+        draw.text((64, 48), scene["eyebrow"], font=FONT_SMALL, fill=cyan)
+        title_font = fit_text(draw, scene["title"], 690, 58, True)
+        draw.text((60, 92), scene["title"], font=title_font, fill=white, stroke_width=2, stroke_fill=(6, 15, 28))
+        draw.text((64, 178), scene["accent"], font=FONT_ACCENT, fill=yellow)
+        y = 235
+        for bullet in scene["bullets"]:
+            text_box = draw.textbbox((0, 0), bullet, font=FONT_SMALL)
+            width = text_box[2] + 42
+            rounded(draw, (64, y, 64 + width, y + 42), 13, (9, 19, 33, 210), cyan, 2)
+            draw.ellipse((78, y + 16, 86, y + 24), fill=cyan)
+            draw.text((96, y + 10), bullet, font=FONT_SMALL, fill=white)
+            y += 52
     draw.text((1130, 48), f"{scene_index + 1:02d} / {len(scenes):02d}", font=FONT_SMALL, fill=muted)
-    title_font = fit_text(draw, scene["title"], 690, 58, True)
-    draw.text((60, 92), scene["title"], font=title_font, fill=white, stroke_width=2, stroke_fill=(6, 15, 28))
-    draw.text((64, 178), scene["accent"], font=FONT_ACCENT, fill=yellow)
-    y = 235
-    for bullet in scene["bullets"]:
-        text_box = draw.textbbox((0, 0), bullet, font=FONT_SMALL)
-        width = text_box[2] + 42
-        rounded(draw, (64, y, 64 + width, y + 42), 13, (9, 19, 33, 210), cyan, 2)
-        draw.ellipse((78, y + 16, 86, y + 24), fill=cyan)
-        draw.text((96, y + 10), bullet, font=FONT_SMALL, fill=white)
-        y += 52
 
     caption = active_caption(schedule, time_value, scene_index)
     rounded(draw, (42, 548, 1238, 674), 24, navy, (84, 112, 145, 255), 2)
