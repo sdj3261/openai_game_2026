@@ -2,11 +2,30 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 
-const expectedVersion = "0.12.0";
+const expectedVersion = "0.13.0";
 const port = 43000 + Math.floor(Math.random() * 1000);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let serverOutput = "";
 let serverErrors = "";
+
+async function fetchLocal(path, attempts = 4) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fetch(`http://127.0.0.1:${port}${path}`);
+    } catch (error) {
+      lastError = error;
+      await wait(30 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
+async function fetchLocalAll(paths) {
+  const responses = [];
+  for (const path of paths) responses.push(await fetchLocal(path));
+  return responses;
+}
 
 const child = spawn(process.execPath, ["server.mjs", "--host", "127.0.0.1"], {
   cwd: process.cwd(),
@@ -25,7 +44,7 @@ try {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (child.exitCode !== null) break;
     try {
-      response = await fetch(`http://127.0.0.1:${port}/`);
+      response = await fetchLocal("/", 1);
       break;
     } catch {
       await wait(50);
@@ -47,6 +66,7 @@ try {
     'id="virtualStick"',
     'data-game-action="noise"',
     'data-game-action="save"',
+    'data-game-action="game-menu"',
     'aria-keyshortcuts="Z"',
     'aria-keyshortcuts="X"',
     "경비원 도발",
@@ -54,6 +74,7 @@ try {
   ];
   const missingHtml = requiredHtml.filter((value) => !html.includes(value));
   if (missingHtml.length) throw new Error(`Served HTML is missing: ${missingHtml.join(", ")}`);
+  assert(!html.includes('data-game-action="undo"') && !html.includes("분신 지우기"), "Removed clone-delete control is still exposed");
 
   const sourceAssetPaths = [
     `/design-system.css?v=${expectedVersion}`,
@@ -78,7 +99,7 @@ try {
     "/assets/fonts/OFL-Galmuri.txt",
     ...spriteBundlePaths,
   ];
-  const assetResponses = await Promise.all(assetPaths.map((path) => fetch(`http://127.0.0.1:${port}${path}`)));
+  const assetResponses = await fetchLocalAll(assetPaths);
   const failedAssets = assetResponses.filter((asset) => !asset.ok);
   if (failedAssets.length) throw new Error(`${failedAssets.length} required game asset(s) failed to load`);
 
@@ -89,6 +110,7 @@ try {
   assert(tokens.includes("--theme-accent"), "Design-system theme token is missing");
   assert(tokens.includes("--font-game-ko") && tokens.includes("Galmuri11-Bold.woff2"), "Bundled Korean game font token is missing");
   assert(appCss.includes(".virtual-stick") && appCss.includes(".mobile-action") && appCss.includes(".game-guide"), "Mobile control or settings-guide styles are missing");
+  assert(appCss.includes(".game-menu-dialog") && appCss.includes('.overlay[data-view="caught"]') && appCss.includes(".caught-dialog"), "Game menu or red caught-dialog styles are missing");
   assert(fontBytes.length > 100000 && String.fromCharCode(...fontBytes.slice(0, 4)) === "wOF2", "Bundled Galmuri11 font is missing or invalid");
   assert(fontLicense.includes("SIL Open Font License, Version 1.1") && fontLicense.includes("Lee Minseo"), "Bundled font license is missing or invalid");
   for (let index = 0; index < spriteBundleBases.length; index += 1) {
@@ -108,7 +130,7 @@ try {
   assert(inputUtils.includes("export function projectAnalogStick"), "Analog-stick utility export is missing");
   assert(spriteAssets.includes(`ASSET_VERSION = "${expectedVersion}"`) && spriteAssets.includes("DUCK_SPRITES") && spriteAssets.includes("GUARD_ROLE_BY_TYPE") && spriteAssets.includes("toy-guards"), "Versioned duck and toy-guard sprite catalog is missing");
   assert(projectileUtils.includes("PROJECTILE_PROFILES") && projectileUtils.includes("firstSweptCollision") && projectileUtils.includes("projectileFlightPosition") && projectileUtils.includes("projectileElapsedMs"), "Projectile physics exports are missing");
-  assert(gameRules.includes("MAX_CLONES = 10") && gameRules.includes("export function canEscape") && gameRules.includes("candidate.hasKey === true"), "Key-only exit or ten-clone rule is missing");
+  assert(gameRules.includes("MAX_CLONES = 10") && gameRules.includes("export function canEscape") && gameRules.includes("candidate.hasKey === true") && gameRules.includes("export function canCollectTeamKey"), "Team-key, key-only exit, or ten-clone rule is missing");
   assert(
     gameRules.includes("export function stageNineBlackoutOpacity")
       && gameRules.includes("export function stageNineEventShakeIntensity")
@@ -120,17 +142,26 @@ try {
   );
   assert(game.includes("spawnedAtMs: clock") && game.includes("projectileElapsedMs(loopElapsed, projectile.spawnedAtMs)"), "Projectile absolute-clock integration is missing");
   assert(game.includes("const actors = [...echoes, player]"), "Clone-first projectile collision ordering is missing");
-  assert(game.includes("if (canEscape({ hasKey: player.hasKey })) completeLevel();") && !game.includes("requiredNoiseEchoes") && !game.includes("requiredEchoes"), "Exit still has a hidden clone or noise requirement");
+  assert(game.includes("collectTeamKey(echo);") && game.includes("collectTeamKey(player);") && game.includes("if (canEscape({ hasKey: keyCollected })) completeLevel();"), "The current duck and clones do not share one key pickup and exit rule");
+  assert(!game.includes("requiredNoiseEchoes") && !game.includes("requiredEchoes"), "Exit still has a hidden clone or noise requirement");
+  const gameMenuSource = game.match(/function showGameMenu\(\)[\s\S]*?function showCaughtOverlay/)?.[0] || "";
+  const caughtSource = game.match(/function showCaughtOverlay\([\s\S]*?function showRecordsOverlay/)?.[0] || "";
+  const restartSource = game.match(/function restartStage\(\)[\s\S]*?\n}/)?.[0] || "";
+  const startLevelSource = game.match(/function startLevel\([\s\S]*?function resetLoop/)?.[0] || "";
+  assert((gameMenuSource.match(/class="game-menu-option(?:\s[^"]*)?"/g) || []).length === 3, "In-game menu must expose exactly three secondary options");
+  assert((caughtSource.match(/<button/g) || []).length === 1 && caughtSource.includes('id="caughtRestartAction"'), "Caught dialog must expose only one restart button");
+  assert(restartSource.includes("startLevel(levelIndex, { retryPenalty, countPlay: false })") && !game.includes("undoLastEcho") && !game.includes("KeyU"), "Fresh restart or clone-delete removal is incomplete");
+  assert(startLevelSource.includes("echoes = []") && startLevelSource.includes("collectedItemIds = new Set()") && startLevelSource.includes("keyCollected = false") && startLevelSource.includes("itemBonusScore = 0"), "Fresh restart does not clear clones, key, and items");
   assert(profileUtils.includes("export const PROFILE_COLORS") && profileUtils.includes("export function getWorldLeaderboard"), "Profile and leaderboard utility exports are missing");
   assert(i18n.includes("export const LANGUAGES") && i18n.includes("export function t") && i18n.includes('gameTitle: "8초 도둑단"') && i18n.includes('guide: "게임 방법"') && i18n.includes('needKey: "먼저 열쇠를 찾으세요!"') && i18n.includes('"09"'), "Translation catalog, guide, or nine-stage copy is missing");
   assert(serverOutput.includes(`http://127.0.0.1:${port}`), "CLI --host did not override LOOP_HEIST_HOST");
 
-  const [faviconResponse, faviconPngResponse, appleIconResponse, thumbnailResponse, manifestResponse] = await Promise.all([
-    fetch(`http://127.0.0.1:${port}/favicon.ico`),
-    fetch(`http://127.0.0.1:${port}/assets/icons/favicon-32.png`),
-    fetch(`http://127.0.0.1:${port}/assets/icons/apple-touch-icon.png`),
-    fetch(`http://127.0.0.1:${port}/assets/marketing/8-second-crew-thumbnail-1920x1080.png`),
-    fetch(`http://127.0.0.1:${port}/site.webmanifest`),
+  const [faviconResponse, faviconPngResponse, appleIconResponse, thumbnailResponse, manifestResponse] = await fetchLocalAll([
+    "/favicon.ico",
+    "/assets/icons/favicon-32.png",
+    "/assets/icons/apple-touch-icon.png",
+    "/assets/marketing/8-second-crew-thumbnail-1920x1080.png",
+    "/site.webmanifest",
   ]);
   assert([faviconResponse, faviconPngResponse, appleIconResponse, thumbnailResponse, manifestResponse].every((asset) => asset.ok), "Favicon, app-icon, or submission-thumbnail assets failed to load");
   const [faviconBuffer, faviconPngBuffer, appleIconBuffer, thumbnailBuffer, manifest] = await Promise.all([
@@ -152,12 +183,12 @@ try {
   assert(manifest.name === "8초 도둑단" && manifest.icons?.some((icon) => icon.sizes === "512x512"), "Web app manifest is missing required game identity data");
   assert(manifestResponse.headers.get("content-type")?.startsWith("application/manifest+json"), "Web app manifest has the wrong content type");
 
-  const [demoPageResponse, demoVideoResponse, demoPosterResponse, demoVttResponse, demoSrtResponse] = await Promise.all([
-    fetch(`http://127.0.0.1:${port}/demo/`),
-    fetch(`http://127.0.0.1:${port}/demo/8-second-crew-demo.mp4`),
-    fetch(`http://127.0.0.1:${port}/demo/poster.png`),
-    fetch(`http://127.0.0.1:${port}/demo/8-second-crew-demo.vtt`),
-    fetch(`http://127.0.0.1:${port}/demo/8-second-crew-demo.srt`),
+  const [demoPageResponse, demoVideoResponse, demoPosterResponse, demoVttResponse, demoSrtResponse] = await fetchLocalAll([
+    "/demo/",
+    "/demo/8-second-crew-demo.mp4",
+    "/demo/poster.png",
+    "/demo/8-second-crew-demo.vtt",
+    "/demo/8-second-crew-demo.srt",
   ]);
   assert([demoPageResponse, demoVideoResponse, demoPosterResponse, demoVttResponse, demoSrtResponse].every((asset) => asset.ok), "Demo viewer assets failed to load");
   const [demoPage, demoVideo, demoPoster, demoVtt, demoSrt] = await Promise.all([
