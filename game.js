@@ -1,13 +1,14 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.6.3";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.7.0";
 import {
   PROFILE_COLORS,
   PROFILE_FACES,
+  calculateStealthScore,
   compareCompletionRecords,
   getWorldLeaderboard,
   getWorldTopRecords,
   normalizeProfile,
-} from "./profile-utils.js?v=0.6.3";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.6.3";
+} from "./profile-utils.js?v=0.7.0";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.7.0";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -53,10 +54,19 @@ const PLAYER_RADIUS = 16;
 const MAX_ECHOES = 5;
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
+const ECHO_COLORS = [
+  { body: "#2878ff", trim: "#bfe1ff" },
+  { body: "#a855f7", trim: "#f0d5ff" },
+  { body: "#10b981", trim: "#c7ffe9" },
+  { body: "#ff7a33", trim: "#ffe0bd" },
+  { body: "#f43f8f", trim: "#ffd0e4" },
+];
+
 const GUARD_ARCHETYPES = {
   sleepy: { label: "눈치봇", symbol: "Z", color: "#d94b5b", speed: 65, range: 180, hearing: 240, fov: 0.82, detectRate: 0.85 },
   listener: { label: "귀쫑봇", symbol: "))", color: "#e65f45", speed: 90, range: 215, hearing: 700, fov: 1.05, detectRate: 1.0 },
   watcher: { label: "렌즈봇", symbol: "◎", color: "#b83f65", speed: 72, range: 250, hearing: 260, fov: 1.5, detectRate: 1.15 },
+  scanner: { label: "회전눈", symbol: "↻", color: "#7c4dcc", speed: 0, range: 235, hearing: 0, fov: 0.72, detectRate: 0.7, rotationSpeed: 0.42 },
   chaser: { label: "쌩쌩봇", symbol: "!", color: "#e23b54", speed: 122, range: 180, hearing: 500, fov: 0.76, detectRate: 1.25 },
   elite: { label: "시계감독관", symbol: "◆", color: "#852d58", speed: 110, range: 270, hearing: 480, fov: 1.28, detectRate: 1.3 },
 };
@@ -77,7 +87,6 @@ const levels = [
     code: "01",
     difficulty: 1,
     requiredEchoes: 0,
-    arcade: { icon: "◆", titleKo: "태엽 박물관", titleEn: "CLOCKWORK MUSEUM", shortName: "태엽 박물관", cue: "벽 뒤로 쏙 → 보석 GET → EXIT", rule: "빨간 레이더 피하기", next: "Z 소리 미끼", echoCues: ["아까미 ON!"] },
     theme: THEMES.museum,
     music: { label: "QUIET STEP", groove: "sparse", bpm: 90, root: 220, type: "triangle", steps: [0, null, 3, null, 7, null, 10, null, 7, null, 3, null] },
     start: { x: 100, y: 585 },
@@ -99,7 +108,7 @@ const levels = [
     code: "02",
     difficulty: 2,
     requiredEchoes: 1,
-    arcade: { icon: "♪", titleKo: "장난감 공장", titleEn: "GEAR FACTORY", shortName: "장난감 공장", cue: "Z 소리 → X 복제 → 위로 쏙", rule: "소리를 듣는 귀쫑봇", next: "문과 미끼 나누기", echoCues: ["아까미 ON · 위로!"] },
+    requiredNoiseEchoes: 1,
     theme: THEMES.warehouse,
     music: { label: "FACTORY BEAT", groove: "industrial", bpm: 105, root: 110, type: "square", steps: [0, null, 0, 7, null, 3, 0, null, 10, 7, null, 3, 0, null] },
     start: { x: 100, y: 580 },
@@ -116,8 +125,7 @@ const levels = [
   {
     code: "03",
     difficulty: 3,
-    requiredEchoes: 2,
-    arcade: { icon: "▣", titleKo: "캔디 아케이드", titleEn: "CANDY ARCADE", shortName: "캔디 아케이드", cue: "A에서 X → 아래서 Z + X", rule: "문지기봇 2대", next: "두 문 동시에 열기", echoCues: ["A OK · 다음 Z", "준비 끝 · 보석으로!"] },
+    requiredEchoes: 1,
     theme: THEMES.casino,
     music: { label: "CASINO BOUNCE", groove: "bounce", bpm: 120, root: 196, type: "square", steps: [0, 3, 7, 10, 7, 3, 0, null, 0, 3, 7, 12, 10, 7, 3, null] },
     start: { x: 100, y: 585 },
@@ -131,15 +139,14 @@ const levels = [
       { x: 690, y: 250, w: 245, h: 32 },
     ],
     guards: [
-      { type: "watcher", name: "고정 관찰자", x: 760, y: 140, speed: 0, range: 280, fov: 1.1, detectRate: 0.55, waypoints: [{ x: 760, y: 140 }] },
-      { type: "chaser", x: 880, y: 540, range: 165, waypoints: [{ x: 880, y: 540 }, { x: 1050, y: 540 }, { x: 1050, y: 470 }, { x: 880, y: 470 }] },
+      { type: "watcher", name: "고정 렌즈", x: 760, y: 140, speed: 0, range: 235, fov: 0.9, detectRate: 0.45, waypoints: [{ x: 760, y: 140 }] },
+      { type: "sleepy", name: "느림보", x: 880, y: 540, speed: 68, range: 150, fov: 0.7, detectRate: 0.65, waypoints: [{ x: 880, y: 540 }, { x: 1050, y: 540 }, { x: 1050, y: 470 }, { x: 880, y: 470 }] },
     ],
   },
   {
     code: "04",
     difficulty: 4,
     requiredEchoes: 2,
-    arcade: { icon: "Ⅱ", titleKo: "구름 연구실", titleEn: "CLOUD LAB", shortName: "구름 연구실", cue: "A에 X → B에 X → 쏙!", rule: "두 문 · 경비 3대", next: "움직이는 역 돌파", echoCues: ["A OK · 다음 B", "B OK · 지금이 GO!"] },
     theme: THEMES.lab,
     music: { label: "LAB ALARM", groove: "alarm", bpm: 135, root: 131, type: "sawtooth", steps: [0, null, 7, 3, 10, 7, 12, null, 7, 0, null, 3, 7, 10, 15, 12, 7, null] },
     start: { x: 100, y: 585 },
@@ -152,21 +159,21 @@ const levels = [
       { x: 760, y: 55, w: 30, h: 205 }, { x: 760, y: 440, w: 30, h: 205 },
     ],
     guards: [
-      { type: "sleepy", x: 285, y: 350, speed: 70, waypoints: [{ x: 285, y: 350 }, { x: 285, y: 520 }, { x: 150, y: 520 }, { x: 150, y: 350 }] },
-      { type: "listener", x: 600, y: 360, speed: 95, hearing: 520, waypoints: [{ x: 600, y: 360 }, { x: 690, y: 360 }, { x: 690, y: 520 }, { x: 480, y: 520 }, { x: 480, y: 360 }] },
-      { type: "watcher", name: "레이저 감시자", x: 900, y: 120, speed: 0, range: 265, hearing: 0, fov: 1.0, detectRate: 0.5, waypoints: [{ x: 900, y: 120 }] },
+      { type: "listener", x: 600, y: 360, speed: 90, hearing: 520, waypoints: [{ x: 600, y: 360 }, { x: 690, y: 360 }, { x: 690, y: 520 }, { x: 480, y: 520 }, { x: 480, y: 360 }] },
+      { type: "scanner", name: "회전눈", x: 900, y: 120, angle: 1.57, range: 235, fov: 0.72, detectRate: 0.65, rotationSpeed: 0.42, waypoints: [{ x: 900, y: 120 }] },
     ],
   },
   {
     code: "05",
     difficulty: 5,
     requiredEchoes: 2,
-    arcade: { icon: "↟", titleKo: "달빛 역", titleEn: "MOONLIGHT STATION", shortName: "달빛 역", cue: "A에 X → 오른쪽에서 Z + X", rule: "경비 3대 · 문과 소음", next: "거울 문 두 개", echoCues: ["A OK · 열차 길 OPEN!", "미끼 OK · 지금이 GO!"] },
+    requiredNoiseEchoes: 1,
     theme: THEMES.station,
     music: { label: "NIGHT TRAIN", groove: "bounce", bpm: 150, root: 147, type: "triangle", steps: [0, null, 3, 7, 10, 7, 3, null, 0, 3, 7, 12, 10, 7, 3, 0, -2, 0, 3, null] },
     start: { x: 100, y: 585 },
     gem: { x: 1030, y: 110 },
     exit: { x: 1080, y: 585 },
+    timeBonus: { x: 650, y: 155, bonus: 1500 },
     plates: [{ id: "A", x: 255, y: 570, r: 30 }],
     doors: [{ x: 520, y: 260, w: 30, h: 180, plateId: "A" }],
     walls: [
@@ -183,7 +190,6 @@ const levels = [
     code: "06",
     difficulty: 6,
     requiredEchoes: 2,
-    arcade: { icon: "◇", titleKo: "거울 성", titleEn: "MIRROR CASTLE", shortName: "거울 성", cue: "A에 X → B에 X → 가운데로 쏙", rule: "거울 문 2개 · 경비 3대", next: "세 아까미 작전", echoCues: ["A OK · 다음 B", "B OK · 거울길 OPEN!"] },
     theme: THEMES.castle,
     music: { label: "MIRROR STEP", groove: "alarm", bpm: 165, root: 165, type: "square", steps: [0, 3, 7, 10, 7, 3, 0, null, 2, 5, 9, 12, 9, 5, 2, null, 0, 3, 7, 12, 10, null] },
     start: { x: 100, y: 585 },
@@ -199,14 +205,14 @@ const levels = [
     guards: [
       { type: "sleepy", x: 290, y: 350, speed: 78, waypoints: [{ x: 290, y: 350 }, { x: 290, y: 520 }, { x: 150, y: 520 }, { x: 150, y: 350 }] },
       { type: "listener", x: 610, y: 360, speed: 100, hearing: 560, waypoints: [{ x: 610, y: 360 }, { x: 715, y: 360 }, { x: 715, y: 520 }, { x: 500, y: 520 }] },
-      { type: "watcher", name: "거울눈", x: 950, y: 160, speed: 0, range: 275, hearing: 0, fov: 1.15, detectRate: 0.8, waypoints: [{ x: 950, y: 160 }] },
+      { type: "scanner", name: "거울눈", x: 950, y: 160, angle: 2.2, range: 255, fov: 0.8, detectRate: 0.8, rotationSpeed: -0.48, waypoints: [{ x: 950, y: 160 }] },
     ],
   },
   {
     code: "07",
     difficulty: 7,
     requiredEchoes: 3,
-    arcade: { icon: "♛", titleKo: "왕실 금고", titleEn: "ROYAL VAULT", shortName: "왕실 금고", cue: "A X → B X → Z 미끼 → 보석", rule: "경비 4대 · 아까미 3명", next: "딱걸이 BOSS", echoCues: ["A · 1/3", "B · 2/3", "미끼 · 3/3 · GO!"] },
+    requiredNoiseEchoes: 1,
     theme: THEMES.vault,
     music: { label: "ROYAL RUSH", groove: "alarm", bpm: 180, root: 123, type: "square", steps: [0, 0, 3, 7, 10, 7, 3, 0, 5, 5, 8, 12, 10, 8, 5, 3, 0, 3, 7, 12, 15, 12, 7, null] },
     start: { x: 100, y: 585 },
@@ -230,7 +236,7 @@ const levels = [
     code: "08",
     difficulty: 8,
     requiredEchoes: 3,
-    arcade: { icon: "☾", titleKo: "자정 시계탑", titleEn: "MIDNIGHT CLOCKTOWER", shortName: "자정 시계탑", cue: "A X → B X → Z로 딱걸이 유인", rule: "FINAL BOSS · 딱걸이", next: "ALL CLEAR!", echoCues: ["A · 1/3", "B · 2/3", "미끼 · 3/3 · HEIST!"] },
+    requiredNoiseEchoes: 1,
     theme: THEMES.clocktower,
     music: { label: "CLOCK BOSS", groove: "boss", bpm: 195, root: 98, type: "sawtooth", steps: [0, 0, 3, 7, 0, 10, 7, 3, 0, -2, 0, 3, 7, 12, 10, 7, 3, 0, 5, 8, 12, 15, 12, 8, 3, null] },
     start: { x: 100, y: 585 },
@@ -360,6 +366,11 @@ let currentMusicStep = -1;
 let toastTimer = null;
 let stageStartedAt = 0;
 let completedLoopElapsed = 0;
+let loopLimit = LOOP_DURATION;
+let timeBonusCollected = false;
+let runRadarHits = 0;
+let runRetries = 0;
+let wasSeenByAnyGuard = false;
 let unlocked = Math.max(1, Math.min(levels.length, Number(localStorage.getItem("loopHeistUnlocked")) || 1));
 let completed = Math.max(0, Math.min(levels.length, Number(localStorage.getItem("loopHeistCompleted")) || 0));
 unlocked = Math.max(unlocked, Math.min(levels.length, completed + 1));
@@ -427,6 +438,9 @@ function sound(name) {
     tone(110, 0.12, "square", 0.04);
   } else if (name === "door") {
     tone(280, 0.13, "sawtooth", 0.025);
+  } else if (name === "timeBonus") {
+    tone(root * 2, 0.08, "square", 0.028);
+    tone(root * 3, 0.13, "square", 0.024, 0.07);
   }
 }
 
@@ -540,7 +554,15 @@ function formatRecordTime(milliseconds) {
   return `${(Number(milliseconds || 0) / 1000).toFixed(2)}s`;
 }
 
+function formatRecordScore(record) {
+  return Number.isFinite(Number(record?.score))
+    ? Math.max(0, Math.round(Number(record.score))).toLocaleString(settings.language)
+    : formatRecordTime(record?.time);
+}
+
 function updateStaticTranslations() {
+  lastAlertValue = -1;
+  document.title = t(settings.language, "gameTitle");
   ui.brandText.textContent = t(settings.language, "gameTitle");
   ui.loopLabel.textContent = t(settings.language, "loop");
   ui.echoLabel.textContent = t(settings.language, "echoName");
@@ -557,6 +579,23 @@ function updateStaticTranslations() {
   ui.desktopNoiseLabel.textContent = t(settings.language, "noise");
   ui.desktopCloneLabel.textContent = t(settings.language, "clone");
   ui.virtualStick?.setAttribute("aria-label", t(settings.language, "joystickHelp"));
+  ui.virtualStick?.setAttribute("aria-valuetext", t(settings.language, "centerStopped"));
+  document.querySelector(".virtual-stick__label").textContent = t(settings.language, "move");
+  document.querySelector(".skip-link").textContent = t(settings.language, "skipGame");
+  document.querySelector(".topbar")?.setAttribute("aria-label", t(settings.language, "operationStatus"));
+  document.querySelector(".hud-cluster")?.setAttribute("aria-label", t(settings.language, "timelineInfo"));
+  canvas.setAttribute("aria-label", t(settings.language, "canvasLabel"));
+  canvas.textContent = t(settings.language, "canvasFallback");
+  document.querySelector('meta[name="description"]')?.setAttribute("content", t(settings.language, "gameHelp"));
+  document.querySelector("#gameHelp").textContent = t(settings.language, "gameHelp");
+  ui.alertMeter?.setAttribute("aria-label", t(settings.language, "alertRisk"));
+  document.querySelector(".mobile-gamepad")?.setAttribute("aria-label", t(settings.language, "mobileControls"));
+  document.querySelector(".mobile-utility-actions")?.setAttribute("aria-label", t(settings.language, "moreControls"));
+  document.querySelector('[data-game-action="restart"]')?.setAttribute("aria-label", t(settings.language, "restartLoop"));
+  document.querySelector('[data-game-action="undo"]')?.setAttribute("aria-label", t(settings.language, "undoLastEcho"));
+  document.querySelector('[data-game-action="menu"]')?.setAttribute("aria-label", t(settings.language, "stageMap"));
+  document.querySelector('[data-game-action="mute"]')?.setAttribute("aria-label", t(settings.language, "soundToggle"));
+  document.querySelector(".controls")?.setAttribute("aria-label", t(settings.language, "keyboardHelp"));
 }
 
 function showProfileOverlay() {
@@ -565,7 +604,6 @@ function showProfileOverlay() {
   const faceButtons = PROFILE_FACES.map((face) => `<button class="profile-face ${face === profile.face ? "is-selected" : ""}" type="button" data-profile-face="${escapeHtml(face)}">${escapeHtml(face)}</button>`).join("");
   setOverlay(`
     <section class="panel toy-dialog profile-dialog" aria-labelledby="overlayTitle">
-      <p class="dialog-kicker">MY TOY THIEF</p>
       <h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "profile")}</h2>
       <div class="profile-preview" id="profilePreview">${avatarMarkup(profile, "toy-avatar--large")}</div>
       <label class="field-label" for="profileName">${t(settings.language, "name")}</label>
@@ -606,12 +644,11 @@ function showSettingsOverlay() {
   const languageOptions = LANGUAGES.map(({ code, label }) => `<option value="${code}" ${code === settings.language ? "selected" : ""}>${label}</option>`).join("");
   setOverlay(`
     <section class="panel toy-dialog settings-dialog" aria-labelledby="overlayTitle">
-      <p class="dialog-kicker">ACCESS & PLAY</p>
       <h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "settings")}</h2>
       <label class="setting-row" for="languageSetting"><span><b>${t(settings.language, "language")}</b><small>한국어 · English · 日本語</small></span><select class="toy-select" id="languageSetting">${languageOptions}</select></label>
       <label class="setting-row" for="visualSoundSetting"><span><b>${t(settings.language, "visualSound")}</b><small>${t(settings.language, "visualSoundHelp")}</small></span><input id="visualSoundSetting" type="checkbox" ${settings.visualSound ? "checked" : ""} /></label>
-      <label class="setting-row" for="soundSetting"><span><b>${t(settings.language, "sound")}</b><small>BGM + SFX</small></span><input id="soundSetting" type="checkbox" ${muted ? "" : "checked"} /></label>
-      <div class="caption-demo" aria-hidden="true"><span>♪ BEAT</span><strong>[→ ${t(settings.language, "guardHeard")}]</strong></div>
+      <label class="setting-row" for="soundSetting"><span><b>${t(settings.language, "sound")}</b><small>${t(settings.language, "gameSound")}</small></span><input id="soundSetting" type="checkbox" ${muted ? "" : "checked"} /></label>
+      <div class="caption-demo" aria-hidden="true"><span>♪ ${t(settings.language, "sound")}</span><strong>[→ ${t(settings.language, "guardHeard")}]</strong></div>
       <div class="dialog-actions"><button class="toy-button toy-button--primary" id="saveSettings" type="button">${t(settings.language, "save")}</button><button class="toy-button" id="closeSettings" type="button">${t(settings.language, "back")}</button></div>
     </section>
   `, "settings");
@@ -637,16 +674,16 @@ function showRecordsOverlay(selectedIndex = levelIndex) {
   const leaderboard = getWorldLeaderboard(completionRecords, recordLevel.code, null, 5);
   const tabs = levels.map((item, index) => `<button class="record-stage-tab ${index === selectedIndex ? "is-current" : ""}" type="button" data-record-stage="${index}" ${index >= unlocked ? "disabled" : ""} aria-label="${t(settings.language, "stage")} ${Number(item.code)}${index >= unlocked ? `, ${t(settings.language, "locked")}` : ""}">${item.code}</button>`).join("");
   const rows = leaderboard.top.length ? leaderboard.top.map((record, index) => `
-    <li class="ranking-row ${record.name === profile.name ? "is-me" : ""}"><b>${index + 1}</b>${avatarMarkup(record, "toy-avatar--tiny")}<span>${escapeHtml(record.name || "PLAYER")}</span><strong>${formatRecordTime(record.time)}</strong><small>×${record.echoes}</small></li>
-  `).join("") : `<li class="empty-record">${t(settings.language, "noRecord")} · PLAY!</li>`;
+    <li class="ranking-row ${record.name === profile.name ? "is-me" : ""}"><b>${index + 1}</b>${avatarMarkup(record, "toy-avatar--tiny")}<span class="ranking-player"><b>${escapeHtml(record.name || t(settings.language, "profile"))}</b><small>${t(settings.language, "radarHitsShort")} ${record.radarHits ?? "-"} · ${t(settings.language, "retriesShort")} ${record.retries ?? "-"} · ${t(settings.language, "echoName")} ${record.echoes}</small></span><strong>${formatRecordScore(record)}</strong></li>
+  `).join("") : `<li class="empty-record">${t(settings.language, "noRecord")}</li>`;
   setOverlay(`
     <section class="panel toy-dialog records-dialog" aria-labelledby="overlayTitle">
-      <div class="records-heading"><div><p class="dialog-kicker">LOCAL SAVE</p><h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "records")} & ${t(settings.language, "ranking")}</h2></div>${avatarMarkup(profile)}</div>
+      <div class="records-heading"><div><h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "records")} · ${t(settings.language, "ranking")}</h2></div>${avatarMarkup(profile)}</div>
       <div class="stat-strip"><div><span>${t(settings.language, "plays")}</span><b>${gameStats.plays}</b></div><div><span>${t(settings.language, "clears")}</span><b>${gameStats.clears}</b></div><div><span>${t(settings.language, "catches")}</span><b>${gameStats.catches}</b></div><div><span>${t(settings.language, "clone")}</span><b>${gameStats.echoes}</b></div></div>
       <nav class="record-stage-tabs" aria-label="${t(settings.language, "stage")}">${tabs}</nav>
-      <div class="ranking-title"><span>${t(settings.language, "deviceRanking")}</span><b>STAGE ${recordLevel.code} · ${escapeHtml(recordStage.title)}</b></div>
+      <div class="ranking-title"><span>${t(settings.language, "deviceRanking")}</span><b>${t(settings.language, "stage")} ${Number(recordLevel.code)} · ${escapeHtml(recordStage.title)}</b></div>
       <ol class="ranking-list">${rows}</ol>
-      <p class="ranking-note">LOCAL · ${leaderboard.total} RUNS</p>
+      <p class="ranking-note">${t(settings.language, "records")} · ${leaderboard.total}</p>
       <button class="records-reset" id="resetRecords" type="button">${t(settings.language, "resetRecords")}</button>
       <div class="dialog-actions"><button class="toy-button toy-button--primary" id="playFromRecords" type="button">${t(settings.language, "play")}</button><button class="toy-button" id="closeRecords" type="button">${t(settings.language, "back")}</button></div>
     </section>
@@ -672,17 +709,21 @@ function showRecordsOverlay(selectedIndex = levelIndex) {
 function showMenu(selectedIndex = null) {
   const previousState = state;
   state = "menu";
+  clearTimeout(toastTimer);
+  ui.toast.classList.remove("show");
+  ui.toast.textContent = "";
+  ui.soundCaption?.classList.remove("show");
+  if (ui.soundCaption) ui.soundCaption.textContent = "";
   keys.clear();
   resetStickInput();
   moveTarget = null;
   if (Number.isInteger(selectedIndex)) levelIndex = clamp(selectedIndex, 0, levels.length - 1);
   else if (previousState === "menu" && !player) levelIndex = Math.max(0, completed >= levels.length ? levels.length - 1 : Math.min(completed, unlocked - 1));
   level = levels[levelIndex];
-  const arcade = level.arcade;
   const stageCopy = localizedStage(level);
-  const nextLevel = levels[levelIndex + 1] || null;
-  const nextCopy = nextLevel ? localizedStage(nextLevel) : null;
   const best = getWorldTopRecords(completionRecords, level.code, 1)[0] || null;
+  const stillHero = reducedMotionQuery.matches ? "idle-1.png" : "animation.gif";
+  const stillBoss = reducedMotionQuery.matches ? "idle-1.png" : "animation.gif";
   applyTheme();
   updateStaticTranslations();
   updateHud();
@@ -694,46 +735,33 @@ function showMenu(selectedIndex = null) {
     const stage = localizedStage(item);
     const status = cleared ? "✓" : index === levelIndex ? t(settings.language, "now") : locked ? "·" : t(settings.language, "next");
     return `
-      <button class="world-node ${cleared ? "is-cleared" : ""} ${index === levelIndex ? "is-current" : ""} ${index === levels.length - 1 ? "is-boss" : ""}" type="button" data-stage-select="${index}" ${locked ? "disabled" : ""} aria-label="${t(settings.language, "stage")} ${Number(item.code)} ${stage.title}, ${locked ? "LOCK" : status}">
-        <span class="world-node__coin" aria-hidden="true">${locked ? "?" : item.code}</span>
-        <b>${status}</b>
-        <small>${index === levelIndex ? escapeHtml(stage.title) : ""}</small>
+      <button class="world-node ${cleared ? "is-cleared" : ""} ${index === levelIndex ? "is-current" : ""} ${index === levels.length - 1 ? "is-boss" : ""}" type="button" data-stage-select="${index}" ${locked ? "disabled" : ""} aria-label="${t(settings.language, "stage")} ${Number(item.code)} ${stage.title}, ${locked ? t(settings.language, "locked") : status}">
+        <span class="world-node__coin" aria-hidden="true">${locked ? "?" : cleared ? "✓" : item.code}</span>
+        <b>${index === levelIndex ? status : ""}</b>
       </button>`;
   }).join("");
   setOverlay(`
     <section class="panel arcade-menu toy-menu" aria-labelledby="overlayTitle">
       <header class="toy-menu__top">
-        <button class="profile-chip" id="profileAction" type="button">${avatarMarkup(profile)}<span><b>${escapeHtml(profile.name)}</b><small>${t(settings.language, "profile")}</small></span></button>
+        <button class="profile-chip" id="profileAction" data-action="profile" type="button" aria-label="${t(settings.language, "profile")} · ${escapeHtml(profile.name)}">${avatarMarkup(profile)}<span><b>${escapeHtml(profile.name)}</b><small>${t(settings.language, "profile")}</small></span></button>
         <div class="arcade-logo toy-logo">
-          <p>SOLO CO-OP · ${levels.length} STAGES</p>
           <h1 id="overlayTitle" data-dialog-title tabindex="-1">${escapeHtml(t(settings.language, "gameTitle"))}</h1>
-          <strong>${escapeHtml(t(settings.language, "gameTagline"))}</strong>
         </div>
-        <nav class="player-tools" aria-label="PLAYER TOOLS"><button class="round-tool" id="recordsAction" type="button" aria-label="${t(settings.language, "ranking")}"><span aria-hidden="true">♛</span><small>${best ? formatRecordTime(best.time) : t(settings.language, "records")}</small></button><button class="round-tool" id="settingsAction" type="button" aria-label="${t(settings.language, "settings")}"><span aria-hidden="true">⚙</span><small>${t(settings.language, "settings")}</small></button></nav>
+        <nav class="player-tools" aria-label="${t(settings.language, "playerTools")}"><button class="round-tool" id="recordsAction" data-action="records" type="button" aria-label="${t(settings.language, "ranking")}"><span aria-hidden="true">♛</span><small>${t(settings.language, "records")}</small></button><button class="round-tool" id="settingsAction" data-action="settings" type="button" aria-label="${t(settings.language, "settings")}"><span aria-hidden="true">⚙</span><small>${t(settings.language, "settings")}</small></button></nav>
       </header>
-      <div class="core-loop-strip" aria-label="${t(settings.language, "ruleRun")}, ${t(settings.language, "ruleCopy")}, ${t(settings.language, "ruleEscape")}">
-        <span><b>1</b>${avatarMarkup(profile, "toy-avatar--tiny")}<small>${t(settings.language, "ruleRun")}</small></span><i>→</i><span><b>2</b><kbd>X</kbd>${avatarMarkup({ ...profile, color: "#62e7ff" }, "toy-avatar--tiny is-echo")}<small>${t(settings.language, "ruleCopy")}</small></span><i>→</i><span><b>3</b><em>◆</em><small>${t(settings.language, "ruleEscape")}</small></span>
-      </div>
       <div class="arcade-stage-card toy-stage-card" data-stage="${level.code}" data-theme="${level.theme.id}">
-        <div class="stage-diorama" aria-label="지금이와 아까미가 경비를 피해 보석으로 이동하는 장난감 도시 미리보기">
-          <span class="diorama-cloud diorama-cloud--one"></span><span class="diorama-cloud diorama-cloud--two"></span><span class="diorama-gear"></span>
-          <span class="diorama-route diorama-route--hero"></span><span class="diorama-route diorama-route--echo"></span><span class="diorama-radar"></span>
-          <span class="diorama-hero">${avatarMarkup(profile)}</span><span class="diorama-echo">${avatarMarkup({ ...profile, color: "#62e7ff" }, "is-echo")}</span>
-          <span class="diorama-guard ${levelIndex === levels.length - 1 ? "is-boss" : ""}"><i></i><b>${levelIndex === levels.length - 1 ? "딱걸이" : "!"}</b></span>
-          <span class="diorama-gem">◆</span><span class="diorama-exit">EXIT</span><span class="diorama-copy">X! COPY</span>
-        </div>
         <div class="arcade-stage-info">
-          <span class="arcade-rule">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length} · ${escapeHtml(stageCopy.rule)}</span>
-          <h2 class="stage-title"><span class="stage-title__local">${escapeHtml(stageCopy.title)}</span><small lang="en">${escapeHtml(arcade.titleEn)}</small></h2>
+          <div class="stage-heading">
+            <span class="stage-mascot"><img src="assets/sprites/hero-idle-v2/${stillHero}" alt="" aria-hidden="true"></span>
+            <div class="stage-heading__copy"><span class="arcade-rule">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length}</span><h2 class="stage-title"><span class="stage-title__local">${escapeHtml(stageCopy.title)}</span></h2><p class="stage-summary">${escapeHtml(stageCopy.rule)}</p></div>
+            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/boss-idle/${stillBoss}" alt="" aria-hidden="true"></span>` : ""}
+          </div>
           <div class="stage-mission"><span>${t(settings.language, "currentGoal")}</span><b>${escapeHtml(stageCopy.cue)}</b></div>
-          <p class="radar-rule"><i aria-hidden="true"></i>${escapeHtml(t(settings.language, "radarRule"))}</p>
-          <div class="stage-next"><span>${t(settings.language, "nextStage")}</span><b>${nextLevel ? `${Number(nextLevel.code)} · ${escapeHtml(nextCopy.title)} · ${escapeHtml(nextCopy.rule)}` : "ALL CLEAR!"}</b></div>
-          <div class="arcade-stats"><span>♪ ${level.music.label} · ${level.music.bpm} BPM</span><span>${t(settings.language, "difficulty")} ${level.difficulty}/${levels.length}</span><span>${t(settings.language, "enemyCount", { value: level.guards.length })} · ${t(settings.language, "echoPlan", { value: level.requiredEchoes })}</span><span>${t(settings.language, "best")} ${best ? formatRecordTime(best.time) : "--"}</span></div>
-          <button class="arcade-play toy-button toy-button--primary" id="quickStart" type="button"><span aria-hidden="true">▶</span> ${t(settings.language, "play")}</button>
+          <div class="arcade-stats"><span>${t(settings.language, "difficulty")} ${level.difficulty}/${levels.length}</span><span>${t(settings.language, "best")} ${best ? formatRecordScore(best) : "--"}</span></div>
+          <button class="arcade-play toy-button toy-button--primary" id="quickStart" data-action="play" type="button"><span aria-hidden="true">▶</span> ${t(settings.language, "play")}</button>
         </div>
       </div>
       <nav class="world-map toy-rail" aria-label="${t(settings.language, "stage")}">${stageNodes}</nav>
-      <div class="arcade-keys" aria-label="기본 조작"><span><kbd>←↑↓→</kbd> ${t(settings.language, "move")}</span><span><kbd>Z</kbd> ${t(settings.language, "noise")}</span><span><kbd>X</kbd> ${t(settings.language, "clone")}</span></div>
     </section>
   `, "menu");
   announce(`${t(settings.language, "stage")} ${Number(level.code)} ${stageCopy.title}. ${stageCopy.cue}`);
@@ -757,6 +785,9 @@ function createGuards() {
     const archetype = GUARD_ARCHETYPES[guard.type] || GUARD_ARCHETYPES.sleepy;
     const waypoints = guard.waypoints?.length ? guard.waypoints : [{ x: guard.x, y: guard.y }];
     const firstDestination = waypoints[1] || waypoints[0];
+    const startingAngle = Number.isFinite(guard.angle)
+      ? guard.angle
+      : Math.atan2(firstDestination.y - guard.y, firstDestination.x - guard.x);
     return {
       ...archetype,
       ...guard,
@@ -765,7 +796,8 @@ function createGuards() {
       name: guard.name || archetype.label,
       x: guard.x,
       y: guard.y,
-      angle: Math.atan2(firstDestination.y - guard.y, firstDestination.x - guard.x),
+      angle: startingAngle,
+      baseAngle: startingAngle,
       waypointIndex: waypoints.length > 1 ? 1 : 0,
       targetId: null,
       targetPoint: null,
@@ -787,6 +819,11 @@ function startLevel(index = levelIndex) {
   applyTheme();
   echoes = [];
   loopNumber = 1;
+  loopLimit = LOOP_DURATION;
+  timeBonusCollected = false;
+  runRadarHits = 0;
+  runRetries = 0;
+  wasSeenByAnyGuard = false;
   stageStartedAt = 0;
   lastClearResult = null;
   gameStats.plays += 1;
@@ -813,6 +850,7 @@ function resetLoop(withEffect = true, preserveStick = false) {
     hasGem: false,
     exposure: 0,
     noiseCooldown: 0,
+    exitHintShown: false,
   };
   currentRecord = makeRecord();
   if (!preserveStick) resetStickInput();
@@ -822,6 +860,7 @@ function resetLoop(withEffect = true, preserveStick = false) {
   sampleAccumulator = 0;
   currentSecond = -1;
   currentMusicStep = -1;
+  wasSeenByAnyGuard = false;
   guards = createGuards();
   noisePulses = [];
   plateStates = new Map(level.plates.map((plate) => [plate.id, false]));
@@ -839,22 +878,21 @@ function resetLoop(withEffect = true, preserveStick = false) {
   }
 }
 
-function saveAndRewind(fromTimeout = false) {
+function saveAndRewind() {
   if (state !== "playing") return;
   const moved = currentRecord.frames.some((frame) => dist(frame, level.start) > 5);
   const hasAction = currentRecord.events.length > 0;
-  if (!fromTimeout && !moved && !hasAction) {
+  if (!moved && !hasAction) {
     showToast(t(settings.language, "moveFirst"), 800);
     return;
   }
   if (echoes.length >= MAX_ECHOES) {
-    showToast("ECHO FULL!", 850);
-    resetLoop(true);
+    showToast(t(settings.language, "echoFull"), 850);
     return;
   }
   const last = currentRecord.frames[currentRecord.frames.length - 1];
-  if (last.t < LOOP_DURATION) {
-    currentRecord.frames.push({ ...last, t: LOOP_DURATION });
+  if (last.t < loopLimit) {
+    currentRecord.frames.push({ ...last, t: loopLimit });
   }
   echoes.push({
     id: `echo-${Date.now()}-${echoes.length}`,
@@ -869,38 +907,45 @@ function saveAndRewind(fromTimeout = false) {
   saveStats();
   loopNumber += 1;
   resetLoop(true, true);
-  showToast(level.arcade.echoCues[echoes.length - 1] || `${t(settings.language, "clone")} ×${echoes.length}`, 1400);
+  showToast(t(settings.language, "echoSaved", { value: echoes.length }), 1100);
 }
 
 function restartCurrentLoop() {
   if (state !== "playing") return;
+  runRetries += 1;
+  loopNumber += 1;
   resetLoop(true);
-  showToast("RETRY!", 700);
+  showToast(t(settings.language, "retry"), 700);
 }
 
 function restartWholeLevel() {
   if (state !== "playing" && state !== "caught") return;
   echoes = [];
   loopNumber = 1;
+  loopLimit = LOOP_DURATION;
+  timeBonusCollected = false;
+  runRadarHits = 0;
+  runRetries = 0;
+  wasSeenByAnyGuard = false;
   resetLoop(true);
   state = "playing";
-  showToast("RESET!", 700);
+  showToast(t(settings.language, "reset"), 700);
 }
 
 function undoLastEcho() {
   if (state !== "playing" || echoes.length === 0) {
-    showToast("NO ECHO", 700);
+    showToast(t(settings.language, "noEcho"), 700);
     return;
   }
   echoes.pop();
   loopNumber = echoes.length + 1;
   resetLoop(true);
-  showToast("ECHO −1", 700);
+  showToast(`${t(settings.language, "echoName")} −1`, 700);
 }
 
 function sampleRecording() {
   currentRecord.frames.push({
-    t: Math.min(loopElapsed, LOOP_DURATION),
+    t: Math.min(loopElapsed, loopLimit),
     x: player.x,
     y: player.y,
     angle: player.angle,
@@ -1037,11 +1082,21 @@ function updatePlayer(dt) {
       if (moveTargetStuckFor > 0.38) {
         moveTarget = null;
         moveTargetStuckFor = 0;
-        showToast("BLOCKED!", 650);
+        showToast(t(settings.language, "blocked"), 650);
       }
     }
   }
   player.noiseCooldown = Math.max(0, player.noiseCooldown - dt);
+
+  if (level.timeBonus && !timeBonusCollected && dist(player, level.timeBonus) < 30) {
+    timeBonusCollected = true;
+    loopLimit = LOOP_DURATION + level.timeBonus.bonus;
+    sound("timeBonus");
+    flash = reducedMotionQuery.matches ? 0 : 0.55;
+    burst(level.timeBonus.x, level.timeBonus.y, "#4f8cff", 22, 135);
+    showToast(t(settings.language, "timeBonus", { value: (level.timeBonus.bonus / 1000).toFixed(1) }), 1000);
+    showSoundCaption("timeBonusSound", level.timeBonus);
+  }
 
   if (!player.hasGem && dist(player, level.gem) < 31) {
     player.hasGem = true;
@@ -1051,7 +1106,19 @@ function updatePlayer(dt) {
     showToast(`${t(settings.language, "gemGet")} → ${t(settings.language, "exit")}`, 1000);
     showSoundCaption("gemGet", level.gem);
   }
-  if (player.hasGem && dist(player, level.exit) < 38) completeLevel();
+  if (player.hasGem && dist(player, level.exit) < 38) {
+    const noiseEchoes = echoes.filter((echo) => echo.recording.events.some((event) => event.type === "noise")).length;
+    if (echoes.length >= level.requiredEchoes && noiseEchoes >= (level.requiredNoiseEchoes || 0)) completeLevel();
+    else if (!player.exitHintShown) {
+      player.exitHintShown = true;
+      const message = echoes.length < level.requiredEchoes
+        ? t(settings.language, "needEcho", { value: level.requiredEchoes })
+        : t(settings.language, "needNoiseEcho");
+      showToast(message, 1200);
+    }
+  } else if (dist(player, level.exit) > 60) {
+    player.exitHintShown = false;
+  }
 }
 
 function updatePlatesAndDoors() {
@@ -1224,9 +1291,15 @@ function updateGuards(dt) {
 
     let destination = null;
     let speed = guard.speed;
+    const freelyScanning = guard.type === "scanner" && !(guard.targetPoint && clock < guard.modeUntil);
     if (guard.targetPoint && clock < guard.modeUntil) {
       destination = guard.targetPoint;
       speed *= 1.55;
+    } else if (freelyScanning) {
+      guard.targetId = null;
+      guard.targetPoint = null;
+      guard.mode = "scan";
+      guard.angle = guard.baseAngle + (clock / 1000) * guard.rotationSpeed;
     } else {
       guard.targetId = null;
       guard.targetPoint = null;
@@ -1238,25 +1311,27 @@ function updateGuards(dt) {
       }
     }
 
-    const angle = Math.atan2(destination.y - guard.y, destination.x - guard.x);
-    guard.angle = angle;
     guard.radius = guard.boss ? 22 : 15;
-    const before = { x: guard.x, y: guard.y };
-    moveCircle(guard, Math.cos(angle) * speed * dt, Math.sin(angle) * speed * dt);
-    if (guard.zone) {
-      guard.x = clamp(guard.x, guard.zone.x + guard.radius, guard.zone.x + guard.zone.w - guard.radius);
-      guard.y = clamp(guard.y, guard.zone.y + guard.radius, guard.zone.y + guard.zone.h - guard.radius);
-    }
-    const moved = dist(before, guard);
-    if (dist(guard, destination) > 20 && moved < 0.35) guard.stuckFor += dt;
-    else guard.stuckFor = 0;
-    if (guard.stuckFor > 0.4) {
-      guard.targetId = null;
-      guard.targetPoint = null;
-      guard.mode = "patrol";
-      guard.modeUntil = 0;
-      guard.stuckFor = 0;
-      guard.waypointIndex = (guard.waypointIndex + 1) % guard.waypoints.length;
+    if (destination) {
+      const angle = Math.atan2(destination.y - guard.y, destination.x - guard.x);
+      guard.angle = angle;
+      const before = { x: guard.x, y: guard.y };
+      moveCircle(guard, Math.cos(angle) * speed * dt, Math.sin(angle) * speed * dt);
+      if (guard.zone) {
+        guard.x = clamp(guard.x, guard.zone.x + guard.radius, guard.zone.x + guard.zone.w - guard.radius);
+        guard.y = clamp(guard.y, guard.zone.y + guard.radius, guard.zone.y + guard.zone.h - guard.radius);
+      }
+      const moved = dist(before, guard);
+      if (dist(guard, destination) > 20 && moved < 0.35) guard.stuckFor += dt;
+      else guard.stuckFor = 0;
+      if (guard.stuckFor > 0.4) {
+        guard.targetId = null;
+        guard.targetPoint = null;
+        guard.mode = "patrol";
+        guard.modeUntil = 0;
+        guard.stuckFor = 0;
+        guard.waypointIndex = (guard.waypointIndex + 1) % guard.waypoints.length;
+      }
     }
 
     // 이동이 끝난 바로 그 좌표에서 시야를 한 번만 계산한다. 이 폴리곤을
@@ -1298,8 +1373,12 @@ function updateGuards(dt) {
     }
   }
 
-  if (currentDetectionRates.length) player.exposure += dt * Math.max(...currentDetectionRates);
+  const seenNow = currentDetectionRates.length > 0;
+  if (seenNow && !wasSeenByAnyGuard) runRadarHits += 1;
+  if (seenNow) wasSeenByAnyGuard = true;
+  if (seenNow) player.exposure += dt * Math.max(...currentDetectionRates);
   else player.exposure = Math.max(0, player.exposure - dt * 1.15);
+  if (!seenNow && player.exposure <= 0.02) wasSeenByAnyGuard = false;
   if (player.exposure >= 1) catchPlayer();
 }
 
@@ -1310,6 +1389,7 @@ function catchPlayer() {
   shake = reducedMotionQuery.matches ? 0 : 14;
   flash = reducedMotionQuery.matches ? 0 : 1;
   gameStats.catches += 1;
+  runRetries += 1;
   saveStats();
   sound("caught");
   showToast(t(settings.language, "caught"), 800);
@@ -1321,11 +1401,22 @@ function completeLevel() {
   state = "complete";
   completedLoopElapsed = loopElapsed;
   const previousBest = getWorldTopRecords(completionRecords, level.code, 1)[0] || null;
+  const scoreResult = calculateStealthScore({
+    radarHits: runRadarHits,
+    retries: runRetries,
+    echoes: echoes.length,
+    targetEchoes: level.requiredEchoes,
+    time: Math.round(completedLoopElapsed),
+  });
   const run = {
     id: `${Date.now()}-${level.code}`,
     world: level.code,
     time: Math.round(completedLoopElapsed),
     echoes: echoes.length,
+    radarHits: runRadarHits,
+    retries: runRetries,
+    score: scoreResult.score,
+    grade: scoreResult.grade,
     name: profile.name,
     color: profile.color,
     face: profile.face,
@@ -1353,22 +1444,22 @@ function showCompleteOverlay() {
   const stageCopy = localizedStage(level);
   const nextLevel = levels[levelIndex + 1] || null;
   const nextCopy = nextLevel ? localizedStage(nextLevel) : null;
-  const efficient = echoes.length <= level.requiredEchoes;
-  const fast = completedLoopElapsed <= 7000;
-  const stars = 1 + Number(efficient) + Number(fast);
-  const result = lastClearResult || { run: { time: completedLoopElapsed, echoes: echoes.length }, previousBest: null, newBest: false, rank: null };
+  const fallbackScore = calculateStealthScore({ radarHits: runRadarHits, retries: runRetries, echoes: echoes.length, targetEchoes: level.requiredEchoes, time: completedLoopElapsed });
+  const result = lastClearResult || { run: { time: completedLoopElapsed, echoes: echoes.length, radarHits: runRadarHits, retries: runRetries, ...fallbackScore }, previousBest: null, newBest: false, rank: null };
   const comparison = result.newBest
-    ? `<p class="clear-record is-best"><b>${t(settings.language, "newBest")}</b>${result.previousBest ? `<span>${t(settings.language, "previousBest")} ${formatRecordTime(result.previousBest.time)} → ${formatRecordTime(result.run.time)}</span>` : ""}</p>`
-    : `<p class="clear-record"><b>${t(settings.language, "deviceRank")} #${result.rank || "-"}</b><span>${t(settings.language, "best")} ${formatRecordTime(getWorldTopRecords(completionRecords, level.code, 1)[0]?.time || result.run.time)}</span></p>`;
+    ? `<p class="clear-record is-best"><b>${t(settings.language, "newBest")}</b>${result.previousBest ? `<span>${t(settings.language, "previousBest")} ${formatRecordScore(result.previousBest)} → ${formatRecordScore(result.run)}</span>` : ""}</p>`
+    : `<p class="clear-record"><b>${t(settings.language, "deviceRank")} #${result.rank || "-"}</b><span>${t(settings.language, "best")} ${formatRecordScore(getWorldTopRecords(completionRecords, level.code, 1)[0] || result.run)}</span></p>`;
   setOverlay(`
     <section class="panel arcade-clear toy-clear" aria-labelledby="overlayTitle">
       <p class="arcade-clear__world">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length}</p>
       <h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "clear")}</h2>
       <strong>${escapeHtml(stageCopy.title)}</strong>
-      <div class="arcade-clear__stars" aria-label="${stars} / 3">${"★".repeat(stars)}${"☆".repeat(3 - stars)}</div>
+      <div class="arcade-clear__stars clear-grade" aria-label="${t(settings.language, "grade")} ${result.run.grade}">${result.run.grade} · ${Number(result.run.score).toLocaleString(settings.language)}</div>
       <div class="arcade-score">
-        <div><span>${t(settings.language, "timeLeft")}</span><b>${formatRecordTime(completedLoopElapsed)}</b></div>
-        <div><span>${t(settings.language, "echoName")}</span><b>×${echoes.length}</b></div>
+        <div><span>${t(settings.language, "radarHits")}</span><b>${result.run.radarHits}</b></div>
+        <div><span>${t(settings.language, "retries")}</span><b>${result.run.retries}</b></div>
+        <div><span>${t(settings.language, "echoName")}</span><b>×${result.run.echoes}</b></div>
+        <div><span>${t(settings.language, "timeLeft")}</span><b>${formatRecordTime(result.run.time)}</b></div>
       </div>
       ${comparison}
       <p class="arcade-unlock">${isLast ? t(settings.language, "allClear") : `${t(settings.language, "stageOpen")} · ${Number(nextLevel.code)} ${escapeHtml(nextCopy.title)}`}</p>
@@ -1379,7 +1470,7 @@ function showCompleteOverlay() {
       </div>
     </section>
   `, "complete");
-  announce(`${t(settings.language, "stage")} ${Number(level.code)} ${t(settings.language, "clear")}. ${t(settings.language, "recordSummary", { time: (completedLoopElapsed / 1000).toFixed(2), echoes: echoes.length })}`);
+  announce(`${t(settings.language, "stage")} ${Number(level.code)} ${t(settings.language, "clear")}. ${t(settings.language, "score")} ${result.run.score}. ${t(settings.language, "recordSummary", { time: (completedLoopElapsed / 1000).toFixed(2), echoes: echoes.length })}`);
   document.querySelector("#nextAction").addEventListener("click", () => {
     if (isLast) showMenu();
     else startLevel(levelIndex + 1);
@@ -1438,7 +1529,7 @@ function update(dt, now) {
       stageStartedAt = performance.now();
       goFlashRemaining = 0.34;
       tone(level.music.root * 3, 0.12, "square", 0.03);
-      showToast(localizedStage(level).cue, 1500);
+      showToast(localizedStage(level).rule, 900);
     }
     updateHud();
     return;
@@ -1447,6 +1538,7 @@ function update(dt, now) {
     caughtTimer -= dt;
     if (caughtTimer <= 0) {
       state = "playing";
+      loopNumber += 1;
       resetLoop(true);
     }
     updateHud();
@@ -1454,18 +1546,18 @@ function update(dt, now) {
   }
   if (state !== "playing") return;
 
-  const gameplayDt = Math.min(dt, Math.max(0, LOOP_DURATION - loopElapsed) / 1000);
-  loopElapsed = Math.min(LOOP_DURATION, loopElapsed + dt * 1000);
-  const musicStep = Math.floor(loopElapsed / (60000 / level.music.bpm));
-  if (musicStep !== currentMusicStep && musicStep < level.music.steps.length) {
-    currentMusicStep = musicStep;
-    document.body.dataset.musicBeat = String(musicStep % 4);
-    playMusicStep(musicStep);
+  const gameplayDt = Math.min(dt, Math.max(0, loopLimit - loopElapsed) / 1000);
+  loopElapsed = Math.min(loopLimit, loopElapsed + dt * 1000);
+  const totalMusicStep = Math.floor(loopElapsed / (60000 / level.music.bpm));
+  if (totalMusicStep !== currentMusicStep) {
+    currentMusicStep = totalMusicStep;
+    document.body.dataset.musicBeat = String(totalMusicStep % 4);
+    playMusicStep(totalMusicStep % level.music.steps.length);
   }
   const second = Math.floor(loopElapsed / 1000);
   if (second !== currentSecond && second < 8) {
     currentSecond = second;
-    if (second === 7) tone(520, 0.055, "square", 0.022);
+    if (loopElapsed >= loopLimit - 1000) tone(520, 0.055, "square", 0.022);
   }
 
   updateEchoes();
@@ -1480,7 +1572,12 @@ function update(dt, now) {
     sampleRecording();
   }
 
-  if (loopElapsed >= LOOP_DURATION && state === "playing") saveAndRewind(true);
+  if (loopElapsed >= loopLimit && state === "playing") {
+    runRetries += 1;
+    loopNumber += 1;
+    resetLoop(true, true);
+    showToast(t(settings.language, "saveWithX"), 1000);
+  }
   updateHud();
 }
 
@@ -1488,7 +1585,7 @@ function updateHud() {
   document.body.dataset.gameState = state;
   ui.loopCount.textContent = String(loopNumber);
   ui.echoCount.textContent = String(echoes.length);
-  ui.timer.textContent = (Math.max(0, LOOP_DURATION - loopElapsed) / 1000).toFixed(1);
+  ui.timer.textContent = (Math.max(0, loopLimit - loopElapsed) / 1000).toFixed(1);
   const exposure = player?.exposure || 0;
   const alertValue = Math.round(clamp(exposure, 0, 1) * 100);
   ui.alertMeter.classList.toggle("active", exposure > 0.02 || guards.some((guard) => guard.seesCurrent));
@@ -1512,6 +1609,9 @@ function updateHud() {
     levelIndex,
     loopNumber,
     loopElapsed: Math.round(loopElapsed),
+    loopLimit,
+    scoreRun: { radarHits: runRadarHits, retries: runRetries },
+    timeBonusCollected,
     player: player ? { x: Math.round(player.x), y: Math.round(player.y), hasGem: player.hasGem, exposure: Number(player.exposure.toFixed(2)) } : null,
     echoes: echoes.map((echo) => ({ x: Math.round(echo.x), y: Math.round(echo.y) })),
     plates: Object.fromEntries(plateStates),
@@ -1745,7 +1845,7 @@ function drawWalls() {
 }
 
 function drawPlatesAndDoors(now) {
-  level.plates.forEach((plate) => {
+  level.plates.forEach((plate, plateIndex) => {
     const active = plateStates.get(plate.id);
     ctx.save();
     ctx.translate(plate.x, plate.y);
@@ -1764,7 +1864,7 @@ function drawPlatesAndDoors(now) {
     ctx.font = "900 15px Segoe UI";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(plate.id, 0, 1);
+    ctx.fillText(String(plateIndex + 1), 0, 1);
     ctx.restore();
   });
 
@@ -1791,9 +1891,39 @@ function drawPlatesAndDoors(now) {
     ctx.fillStyle = open ? "#7bffd4" : "#ff6b86";
     ctx.font = "800 10px Segoe UI";
     ctx.textAlign = "center";
-    ctx.fillText(`${door.plateId} LOCK`, door.x + door.w / 2, door.y - 8);
+    const doorNumber = Math.max(1, level.plates.findIndex((plate) => plate.id === door.plateId) + 1);
+    ctx.fillText(`${doorNumber} ${t(settings.language, open ? "open" : "lock")}`, door.x + door.w / 2, door.y - 8);
     ctx.restore();
   });
+}
+
+function drawTimeBonus(now) {
+  if (!level.timeBonus || timeBonusCollected) return;
+  const pulse = reducedMotionQuery.matches ? 0 : Math.floor(now / 180) % 2;
+  const { x, y, bonus } = level.timeBonus;
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.fillStyle = "rgba(23,35,58,.22)";
+  ctx.fillRect(-18, 19, 36, 7);
+  ctx.fillStyle = ACTOR_COLORS.outline;
+  ctx.fillRect(-18, -18, 36, 36);
+  ctx.fillRect(-23, -7, 46, 14);
+  ctx.fillRect(-7, -23, 14, 46);
+  ctx.fillStyle = pulse ? "#8fd7ff" : "#4f8cff";
+  ctx.fillRect(-14, -14, 28, 28);
+  ctx.fillRect(-19, -4, 38, 8);
+  ctx.fillRect(-4, -19, 8, 38);
+  ctx.fillStyle = "#fff7d6";
+  ctx.fillRect(-3, -11, 6, 12);
+  ctx.fillRect(-3, -3, 11, 6);
+  ctx.fillStyle = ACTOR_COLORS.outline;
+  ctx.fillRect(-25, 29, 50, 17);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = '900 12px "Galmuri11", "Malgun Gothic", sans-serif';
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(t(settings.language, "timeBonusLabel", { value: (bonus / 1000).toFixed(1) }), 0, 38);
+  ctx.restore();
 }
 
 function drawGem(now) {
@@ -1830,7 +1960,7 @@ function drawGem(now) {
   ctx.font = '900 10px "Cascadia Mono", Consolas, monospace';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("TIME", level.gem.x, level.gem.y + 44);
+  ctx.fillText(t(settings.language, "gem"), level.gem.x, level.gem.y + 44);
 }
 
 function drawExit(now) {
@@ -1876,7 +2006,7 @@ function drawExit(now) {
   ctx.font = '900 10px "Cascadia Mono", Consolas, monospace';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(active ? "EXIT!" : "LOCK", level.exit.x, level.exit.y + 46);
+  ctx.fillText(active ? t(settings.language, "exit") : t(settings.language, "lock"), level.exit.x, level.exit.y + 46);
 }
 
 function drawVisionCones() {
@@ -1914,8 +2044,9 @@ function drawVisionCones() {
 
 function drawAgent(actor, isEcho = false, index = 0) {
   const unit = renderView.zoomed ? 3 : 2;
-  const bodyColor = isEcho ? ACTOR_COLORS.echo : resolvedPlayerColor();
-  const outlineColor = isEcho ? ACTOR_COLORS.echoDark : ACTOR_COLORS.outline;
+  const echoPalette = ECHO_COLORS[index % ECHO_COLORS.length];
+  const bodyColor = isEcho ? echoPalette.body : resolvedPlayerColor();
+  const outlineColor = ACTOR_COLORS.outline;
   const facingX = Math.cos(actor.angle);
   const facingY = Math.sin(actor.angle);
   const directionX = Math.abs(facingX) > 0.32 ? Math.sign(facingX) : 0;
@@ -1927,8 +2058,8 @@ function drawAgent(actor, isEcho = false, index = 0) {
   ctx.fillStyle = ACTOR_COLORS.outline;
   ctx.fillRect(-6 * unit, 6 * unit, 12 * unit, 3 * unit);
 
-  ctx.globalAlpha = isEcho ? 0.7 : 1;
-  ctx.fillStyle = isEcho ? ACTOR_COLORS.echo : ACTOR_COLORS.scarf;
+  ctx.globalAlpha = isEcho ? 0.92 : 1;
+  ctx.fillStyle = isEcho ? echoPalette.trim : ACTOR_COLORS.scarf;
   for (const step of [7, 10]) {
     ctx.fillRect(Math.round(-facingX * step * unit) - unit, Math.round(-facingY * step * unit) - unit, unit * 2, unit * 2);
   }
@@ -1939,11 +2070,11 @@ function drawAgent(actor, isEcho = false, index = 0) {
   ctx.fillRect(-6 * unit, -5 * unit, 12 * unit, 10 * unit);
   ctx.fillRect(-5 * unit, -7 * unit, 10 * unit, 14 * unit);
 
-  ctx.globalAlpha = isEcho ? 0.58 : 1;
+  ctx.globalAlpha = isEcho ? 0.88 : 1;
   ctx.fillStyle = bodyColor;
   ctx.fillRect(-5 * unit, -4 * unit, 10 * unit, 8 * unit);
   ctx.fillRect(-4 * unit, -6 * unit, 8 * unit, 12 * unit);
-  ctx.fillStyle = isEcho ? "#d9fbff" : ACTOR_COLORS.face;
+  ctx.fillStyle = isEcho ? echoPalette.trim : ACTOR_COLORS.face;
   ctx.fillRect(-4 * unit, -3 * unit, 8 * unit, 4 * unit);
   if (!isEcho) {
     ctx.fillStyle = ACTOR_COLORS.scarf;
@@ -1966,19 +2097,19 @@ function drawAgent(actor, isEcho = false, index = 0) {
     ctx.fillRect(-5 * unit, -unit, 10 * unit, unit);
     ctx.fillRect(-4 * unit, 3 * unit, 8 * unit, unit);
     ctx.globalAlpha = 0.8;
-    ctx.strokeStyle = ACTOR_COLORS.echo;
+    ctx.strokeStyle = echoPalette.trim;
     ctx.lineWidth = unit;
     ctx.setLineDash([unit * 2, unit * 2]);
     ctx.strokeRect(-7 * unit, -8 * unit, 14 * unit, 16 * unit);
     ctx.setLineDash([]);
 
     ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(-4 * unit, -12 * unit, 8 * unit, 4 * unit);
-    ctx.fillStyle = "#d9fbff";
-    ctx.font = `900 ${unit * 3}px "Cascadia Mono", Consolas, monospace`;
+    ctx.fillRect(-5 * unit, -14 * unit, 10 * unit, 6 * unit);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `900 ${unit * 4}px "Cascadia Mono", Consolas, monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(String(index + 1), 0, -10 * unit);
+    ctx.fillText(String(index + 1), 0, -11 * unit);
   }
   ctx.restore();
 
@@ -1996,21 +2127,27 @@ function drawAgent(actor, isEcho = false, index = 0) {
 }
 
 function drawEchoTrail(echo, index) {
-  const colors = ["#62e7ff", "#9d8cff", "#68ffd0", "#ff8bd8", "#81a8ff"];
-  const color = colors[index % colors.length];
+  const color = ECHO_COLORS[index % ECHO_COLORS.length].body;
   ctx.save();
+  const drawTrailLine = () => {
+    ctx.beginPath();
+    const start = Math.max(0, loopElapsed - 1600);
+    for (let t = start; t <= loopElapsed; t += 100) {
+      const pose = poseAt(echo.recording, t);
+      if (t === start) ctx.moveTo(pose.x, pose.y);
+      else ctx.lineTo(pose.x, pose.y);
+    }
+    ctx.stroke();
+  };
+  ctx.strokeStyle = ACTOR_COLORS.outline;
+  ctx.globalAlpha = 0.2;
+  ctx.lineWidth = 6;
+  ctx.setLineDash([6, 7]);
+  drawTrailLine();
   ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.13;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([4, 8]);
-  ctx.beginPath();
-  const start = Math.max(0, loopElapsed - 1600);
-  for (let t = start; t <= loopElapsed; t += 100) {
-    const pose = poseAt(echo.recording, t);
-    if (t === start) ctx.moveTo(pose.x, pose.y);
-    else ctx.lineTo(pose.x, pose.y);
-  }
-  ctx.stroke();
+  ctx.globalAlpha = 0.72;
+  ctx.lineWidth = 3;
+  drawTrailLine();
   ctx.restore();
 }
 
@@ -2050,6 +2187,11 @@ function drawGuard(guard, now) {
   } else if (guard.type === "watcher") {
     ctx.fillRect(-2 * unit, -10 * unit, 4 * unit, 4 * unit);
     ctx.fillRect(-unit, -13 * unit, 2 * unit, 4 * unit);
+  } else if (guard.type === "scanner") {
+    ctx.fillRect(-2 * unit, -11 * unit, 4 * unit, 5 * unit);
+    ctx.fillRect(-8 * unit, -12 * unit, 16 * unit, 2 * unit);
+    ctx.fillRect(-9 * unit, -13 * unit, 3 * unit, 4 * unit);
+    ctx.fillRect(6 * unit, -13 * unit, 3 * unit, 4 * unit);
   } else if (guard.type === "chaser") {
     for (const step of [8, 11]) {
       ctx.fillRect(Math.round(-facingX * step * unit) - unit, Math.round(-facingY * step * unit) - unit, unit * 2, unit * 2);
@@ -2079,7 +2221,7 @@ function drawGuard(guard, now) {
   const lensX = Math.round(facingX * unit * 2);
   const lensY = Math.round(facingY * unit);
   ctx.fillStyle = alerted ? "#fff6f0" : ACTOR_COLORS.outline;
-  if (guard.type === "watcher" || guard.boss) {
+  if (guard.type === "watcher" || guard.type === "scanner" || guard.boss) {
     ctx.fillRect(-unit + lensX, -2 * unit + lensY, 2 * unit, 2 * unit);
   } else {
     ctx.fillRect(-3 * unit + lensX, -2 * unit + lensY, unit, unit);
@@ -2100,14 +2242,14 @@ function drawGuard(guard, now) {
     ctx.fillStyle = ACTOR_COLORS.outline;
     ctx.fillRect(guard.x - 33, labelY - 8, 66, 16);
     ctx.fillStyle = "#fff1b6";
-    ctx.fillText("BOSS·Z", guard.x, labelY);
+    ctx.fillText(`${t(settings.language, "boss")}·Z`, guard.x, labelY);
   } else if (alerted) {
     ctx.fillStyle = ACTOR_COLORS.danger;
     ctx.fillRect(guard.x - 8, labelY - 8, 16, 16);
     ctx.fillStyle = "#ffffff";
     ctx.fillText("!", guard.x, labelY);
   } else {
-    const marker = { sleepy: "Z", listener: "♪", watcher: "◎", chaser: "»", elite: "◆" }[guard.type] || guard.symbol;
+    const marker = { sleepy: "Z", listener: "♪", watcher: "◎", scanner: "↻", chaser: "»", elite: "◆" }[guard.type] || guard.symbol;
     ctx.fillStyle = ACTOR_COLORS.guardDark;
     ctx.fillRect(guard.x - 8, labelY - 7, 16, 14);
     ctx.fillStyle = "#fff0d0";
@@ -2149,9 +2291,9 @@ function drawWorldLabels() {
   ctx.fillStyle = `${level.theme.accent}aa`;
   ctx.font = `900 ${renderView.zoomed ? 18 : 11}px "Cascadia Mono", Consolas, monospace`;
   ctx.textAlign = "left";
-  ctx.fillText(`${level.theme.location.toUpperCase()} · SECTOR ${level.code}`, 72, 76);
+  ctx.fillText(localizedStage(level).title, 72, 76);
   ctx.textAlign = "right";
-  ctx.fillText(level.guards.some((guard) => guard.boss) ? "BOSS FLOOR" : `LOOP ${String(loopNumber).padStart(2, "0")}`, W - 72, 76);
+  ctx.fillText(level.guards.some((guard) => guard.boss) ? t(settings.language, "bossFloor") : `${t(settings.language, "loop")} ${String(loopNumber).padStart(2, "0")}`, W - 72, 76);
 }
 
 function drawMoveTarget(now) {
@@ -2216,7 +2358,7 @@ function screenToWorld(clientX, clientY) {
 function drawArcadeOverlay() {
   if (state !== "countdown" && goFlashRemaining <= 0) return;
   const hasBoss = level.guards.some((guard) => guard.boss);
-  const label = state === "countdown" ? (hasBoss && countdownRemaining > 500 ? "BOSS!" : "READY") : "GO!";
+  const label = state === "countdown" ? (hasBoss && countdownRemaining > 500 ? t(settings.language, "boss") : t(settings.language, "ready")) : t(settings.language, "go");
   const size = Math.max(34, Math.round(Math.min(canvas.width, canvas.height) * 0.13));
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2252,6 +2394,7 @@ function render(now) {
   drawExit(visualNow);
   drawPlatesAndDoors(visualNow);
   drawWalls();
+  drawTimeBonus(visualNow);
   drawGem(visualNow);
   drawMoveTarget(visualNow);
   echoes.forEach(drawEchoTrail);
@@ -2304,7 +2447,7 @@ function resetStickInput(pointerId = null) {
   stickInput.pointerId = null;
   ui.virtualStick?.classList.remove("is-active");
   if (ui.virtualStickKnob) ui.virtualStickKnob.style.transform = "translate3d(0, 0, 0)";
-  ui.virtualStick?.setAttribute("aria-valuetext", "중앙 · 정지");
+  ui.virtualStick?.setAttribute("aria-valuetext", t(settings.language, "centerStopped"));
   if (activePointerId != null && ui.virtualStick?.hasPointerCapture?.(activePointerId)) {
     try { ui.virtualStick.releasePointerCapture(activePointerId); } catch {}
   }
@@ -2454,6 +2597,9 @@ window.__LOOP_HEIST_DEBUG__ = {
     levelIndex,
     loopNumber,
     loopElapsed,
+    loopLimit,
+    scoreRun: { radarHits: runRadarHits, retries: runRetries },
+    timeBonusCollected,
     player: player ? { x: player.x, y: player.y, hasGem: player.hasGem, exposure: player.exposure } : null,
     echoes: echoes.map((echo) => ({ x: echo.x, y: echo.y })),
     plates: Object.fromEntries(plateStates),

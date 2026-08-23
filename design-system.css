@@ -1,8 +1,18 @@
+/* Galmuri11 Bold v2.40.4 — SIL Open Font License 1.1. */
+@font-face {
+  font-family: "Galmuri11";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/Galmuri11-Bold.woff2") format("woff2");
+}
+
 /* 8초 도둑단 design tokens: bright clockwork toys, readable Korean, clear focus. */
 :root {
   color-scheme: light;
 
   --font-ui: "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Yu Gothic UI", Meiryo, sans-serif;
+  --font-game-ko: "Galmuri11", var(--font-ui);
   --font-display-en: "Arial Rounded MT Bold", "Trebuchet MS", "Arial Black", sans-serif;
   --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   --font-sans: var(--font-ui);
@@ -43,7 +53,7 @@
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 20px;
-  --control-size: 44px;
+  --control-size: 48px;
   --focus-ring: 0 0 0 3px #ffffff, 0 0 0 7px var(--toy-blue);
 }
 

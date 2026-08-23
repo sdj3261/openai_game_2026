@@ -8,7 +8,8 @@ const CORE_KEYS = [
   "clone", "profile", "records", "ranking", "settings", "language", "visualSound",
   "visualSoundHelp", "mute", "back", "save", "currentGoal", "nextStage", "difficulty", "best",
   "noRecord", "clear", "caught", "doorOpen", "guardHeard", "bossAlert", "gemGet", "exit",
-  "stage", "now", "next",
+  "stage", "now", "next", "score", "grade", "radarHits", "retries", "echoFull",
+  "saveWithX", "echoSaved", "needEcho", "needNoiseEcho", "timeBonus", "timeBonusSound",
 ];
 
 test("LANGUAGES exposes immutable Korean, English, and Japanese options", () => {
@@ -61,8 +62,8 @@ test("t falls back to Korean for unsupported languages and to the key when missi
 });
 
 test("t replaces named params safely and preserves placeholders without a value", () => {
-  assert.equal(t("ko", "recordSummary", { time: "6.2", echoes: 2 }), "6.2초 · 에코 ×2");
+  assert.equal(t("ko", "recordSummary", { time: "6.2", echoes: 2 }), "6.2초 · 분신 ×2");
   assert.equal(t("en", "recordSummary", { time: "$&", echoes: 1 }), "$&s · ECHO ×1");
   assert.equal(t("ja", "recordSummary", { time: 7 }), "7秒 · エコー×{echoes}");
-  assert.equal(t("ko", "recordSummary", null), "{time}초 · 에코 ×{echoes}");
+  assert.equal(t("ko", "recordSummary", null), "{time}초 · 분신 ×{echoes}");
 });
