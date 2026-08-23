@@ -1,4 +1,4 @@
-name: Deploy playable web build
+name: Deploy 8 Second Crew
 
 on:
   push:
@@ -15,38 +15,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - name: Install
-        run: npm ci
-      - name: Test
-        run: npm test
-      - name: Build
-        run: npm run build
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: dist
-
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
     steps:
-      - name: Deploy
+      - name: Check out 8 Second Crew
+        uses: actions/checkout@v4
+        with:
+          ref: master
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Test game
+        run: npm test
+      - name: Prepare static site
+        run: |
+          mkdir -p _site
+          cp index.html design-system.css styles.css game.js input-utils.js profile-utils.js i18n.js _site/
+          cp -R assets _site/
+          cp .nojekyll _site/.nojekyll
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - name: Deploy to Pages
         id: deployment
         uses: actions/deploy-pages@v4
