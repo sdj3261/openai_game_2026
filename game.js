@@ -1,4 +1,4 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.8.2";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.9.0";
 import {
   PROFILE_COLORS,
   PROFILE_FACES,
@@ -8,8 +8,17 @@ import {
   getWorldLeaderboard,
   getWorldTopRecords,
   normalizeProfile,
-} from "./profile-utils.js?v=0.8.2";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.8.2";
+} from "./profile-utils.js?v=0.9.0";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.9.0";
+import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.9.0";
+import {
+  PROJECTILE_PROFILES,
+  createProjectileLaunch,
+  firstSweptCollision,
+  projectileElapsedMs,
+  projectileFlightPosition,
+  shouldRemoveProjectile,
+} from "./projectile-utils.js?v=0.9.0";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -64,12 +73,12 @@ const ECHO_COLORS = [
 ];
 
 const GUARD_ARCHETYPES = {
-  sleepy: { label: "눈치봇", symbol: "Z", color: "#d94b5b", speed: 65, range: 180, hearing: 240, fov: 0.82, detectRate: 0.85 },
-  listener: { label: "귀쫑봇", symbol: "))", color: "#e65f45", speed: 90, range: 215, hearing: 700, fov: 1.05, detectRate: 1.0 },
-  watcher: { label: "렌즈봇", symbol: "◎", color: "#b83f65", speed: 72, range: 250, hearing: 260, fov: 1.5, detectRate: 1.15 },
-  scanner: { label: "회전눈", symbol: "↻", color: "#7c4dcc", speed: 0, range: 235, hearing: 0, fov: 0.72, detectRate: 0.7, rotationSpeed: 0.42 },
-  chaser: { label: "쌩쌩봇", symbol: "!", color: "#e23b54", speed: 122, range: 180, hearing: 500, fov: 0.76, detectRate: 1.25 },
-  elite: { label: "시계감독관", symbol: "◆", color: "#852d58", speed: 110, range: 270, hearing: 480, fov: 1.28, detectRate: 1.3 },
+  sleepy: { label: "몽둥이 순찰병", symbol: "●", sprite: "club", weapon: "club", visionStyle: "patrol", captureFx: "swing", color: "#d94b5b", speed: 65, range: 180, hearing: 240, fov: 0.82, detectRate: 0.85 },
+  listener: { label: "호루라기 청음병", symbol: "♪", sprite: "listener", weapon: "whistle", visionStyle: "hearing", captureFx: "whistle", color: "#e65f45", speed: 90, range: 215, hearing: 700, fov: 1.05, detectRate: 1.0 },
+  watcher: { label: "장난감 궁수", symbol: "➶", sprite: "archer", weapon: "bow", visionStyle: "aim", captureFx: "arrow", color: "#b83f65", speed: 72, range: 250, hearing: 260, fov: 1.5, detectRate: 1.15 },
+  scanner: { label: "탐조등 감시병", symbol: "☀", sprite: "searchlight", weapon: "searchlight", visionStyle: "scanner", captureFx: "flash", color: "#7c4dcc", speed: 0, range: 235, hearing: 0, fov: 0.72, detectRate: 0.7, rotationSpeed: 0.42 },
+  chaser: { label: "그물총 추격병", symbol: "⊕", sprite: "netgun", weapon: "netgun", visionStyle: "chase", captureFx: "net", color: "#e23b54", speed: 122, range: 180, hearing: 500, fov: 0.76, detectRate: 1.25 },
+  elite: { label: "경비대장", symbol: "★", sprite: "captain", weapon: "baton", visionStyle: "elite", captureFx: "command", color: "#852d58", speed: 110, range: 270, hearing: 480, fov: 1.28, detectRate: 1.3 },
 };
 
 const THEMES = {
@@ -163,8 +172,8 @@ const levels = [
       { x: 690, y: 250, w: 245, h: 32 },
     ],
     guards: [
-      { type: "watcher", name: "고정 렌즈", x: 760, y: 140, speed: 0, range: 235, fov: 0.9, detectRate: 0.45, waypoints: [{ x: 760, y: 140 }] },
-      { type: "sleepy", name: "느림보", x: 880, y: 540, speed: 68, range: 150, fov: 0.7, detectRate: 0.65, waypoints: [{ x: 880, y: 540 }, { x: 1050, y: 540 }, { x: 1050, y: 470 }, { x: 880, y: 470 }] },
+      { type: "watcher", name: "고정 궁수", x: 760, y: 140, speed: 0, range: 235, fov: 0.9, detectRate: 0.45, waypoints: [{ x: 760, y: 140 }] },
+      { type: "sleepy", name: "몽둥이 순찰병", x: 880, y: 540, speed: 68, range: 150, fov: 0.7, detectRate: 0.65, waypoints: [{ x: 880, y: 540 }, { x: 1050, y: 540 }, { x: 1050, y: 470 }, { x: 880, y: 470 }] },
     ],
   },
   {
@@ -186,7 +195,7 @@ const levels = [
     ],
     guards: [
       { type: "listener", x: 600, y: 360, speed: 90, hearing: 520, waypoints: [{ x: 600, y: 360 }, { x: 690, y: 360 }, { x: 690, y: 520 }, { x: 480, y: 520 }, { x: 480, y: 360 }] },
-      { type: "scanner", name: "회전눈", x: 900, y: 120, angle: 1.57, range: 235, fov: 0.72, detectRate: 0.65, rotationSpeed: 0.42, waypoints: [{ x: 900, y: 120 }] },
+      { type: "scanner", name: "회전 탐조등", x: 900, y: 120, angle: 1.57, range: 235, fov: 0.72, detectRate: 0.65, rotationSpeed: 0.42, waypoints: [{ x: 900, y: 120 }] },
     ],
   },
   {
@@ -208,9 +217,9 @@ const levels = [
       { x: 165, y: 300, w: 225, h: 36 }, { x: 720, y: 390, w: 245, h: 36 },
     ],
     guards: [
-      { type: "watcher", name: "역무봇", x: 355, y: 150, speed: 0, range: 230, fov: 1.2, detectRate: 0.75, waypoints: [{ x: 355, y: 150 }] },
-      { type: "listener", name: "방송봇", x: 640, y: 350, speed: 88, hearing: 560, range: 150, waypoints: [{ x: 640, y: 350 }, { x: 680, y: 350 }, { x: 680, y: 520 }, { x: 580, y: 520 }] },
-      { type: "chaser", name: "급행봇", x: 860, y: 520, speed: 135, range: 170, waypoints: [{ x: 860, y: 520 }, { x: 1060, y: 520 }, { x: 1060, y: 330 }, { x: 780, y: 330 }] },
+      { type: "watcher", name: "역무 궁수", x: 355, y: 150, speed: 0, range: 230, fov: 1.2, detectRate: 0.75, waypoints: [{ x: 355, y: 150 }] },
+      { type: "listener", name: "호루라기 역무원", x: 640, y: 350, speed: 88, hearing: 560, range: 150, waypoints: [{ x: 640, y: 350 }, { x: 680, y: 350 }, { x: 680, y: 520 }, { x: 580, y: 520 }] },
+      { type: "chaser", name: "그물총 추격병", x: 860, y: 520, speed: 135, range: 170, waypoints: [{ x: 860, y: 520 }, { x: 1060, y: 520 }, { x: 1060, y: 330 }, { x: 780, y: 330 }] },
     ],
   },
   {
@@ -234,7 +243,7 @@ const levels = [
     guards: [
       { type: "sleepy", x: 290, y: 350, speed: 78, waypoints: [{ x: 290, y: 350 }, { x: 290, y: 520 }, { x: 150, y: 520 }, { x: 150, y: 350 }] },
       { type: "listener", x: 610, y: 360, speed: 100, hearing: 560, waypoints: [{ x: 610, y: 360 }, { x: 715, y: 360 }, { x: 715, y: 520 }, { x: 500, y: 520 }] },
-      { type: "scanner", name: "거울눈", x: 950, y: 160, angle: 2.2, range: 255, fov: 0.8, detectRate: 0.8, rotationSpeed: -0.48, waypoints: [{ x: 950, y: 160 }] },
+      { type: "scanner", name: "역회전 탐조등", x: 950, y: 160, angle: 2.2, range: 255, fov: 0.8, detectRate: 0.8, rotationSpeed: -0.48, waypoints: [{ x: 950, y: 160 }] },
     ],
   },
   {
@@ -257,10 +266,10 @@ const levels = [
       { x: 465, y: 295, w: 165, h: 38 }, { x: 850, y: 375, w: 180, h: 38 },
     ],
     guards: [
-      { type: "watcher", x: 210, y: 330, speed: 60, range: 205, waypoints: [{ x: 210, y: 330 }, { x: 315, y: 330 }, { x: 315, y: 500 }, { x: 150, y: 500 }] },
+      { type: "watcher", x: 210, y: 330, speed: 60, range: 205, fov: 1.25, detectRate: 1.0, waypoints: [{ x: 210, y: 330 }, { x: 315, y: 330 }, { x: 315, y: 500 }, { x: 150, y: 500 }] },
       { type: "listener", x: 520, y: 390, speed: 90, hearing: 650, waypoints: [{ x: 520, y: 390 }, { x: 670, y: 390 }, { x: 670, y: 520 }, { x: 440, y: 520 }] },
       { type: "chaser", x: 610, y: 150, speed: 145, range: 165, zone: { x: 420, y: 75, w: 270, h: 210 }, waypoints: [{ x: 610, y: 150 }, { x: 670, y: 150 }, { x: 670, y: 250 }, { x: 480, y: 250 }] },
-      { type: "elite", name: "왕관봇", x: 930, y: 450, range: 230, detectRate: 1.0, zone: { x: 790, y: 90, w: 300, h: 480 }, waypoints: [{ x: 930, y: 450 }, { x: 1060, y: 450 }, { x: 1060, y: 230 }, { x: 835, y: 230 }] },
+      { type: "elite", name: "왕실 경비대장", x: 930, y: 450, range: 230, detectRate: 1.0, zone: { x: 790, y: 90, w: 300, h: 480 }, waypoints: [{ x: 930, y: 450 }, { x: 1060, y: 450 }, { x: 1060, y: 230 }, { x: 835, y: 230 }] },
     ],
   },
   {
@@ -286,10 +295,10 @@ const levels = [
       { x: 700, y: 55, w: 30, h: 65 }, { x: 700, y: 270, w: 30, h: 375 },
     ],
     guards: [
-      { type: "watcher", name: "관리인", x: 170, y: 250, speed: 72, range: 245, hearing: 0, fov: 1.5, detectRate: 1.15, waypoints: [{ x: 170, y: 250 }, { x: 300, y: 250 }, { x: 300, y: 360 }, { x: 170, y: 360 }] },
+      { type: "watcher", name: "시계탑 궁수", x: 170, y: 250, speed: 72, range: 245, hearing: 0, fov: 1.5, detectRate: 1.15, waypoints: [{ x: 170, y: 250 }, { x: 300, y: 250 }, { x: 300, y: 360 }, { x: 170, y: 360 }] },
       { type: "listener", name: "청음병", x: 500, y: 330, speed: 92, range: 215, hearing: 720, fov: 1.05, detectRate: 1.05, waypoints: [{ x: 500, y: 330 }, { x: 640, y: 330 }, { x: 640, y: 450 }, { x: 430, y: 450 }, { x: 430, y: 330 }] },
       { type: "chaser", x: 550, y: 160, speed: 150, range: 185, hearing: 420, fov: 0.76, detectRate: 1.3, zone: { x: 430, y: 80, w: 175, h: 300 }, waypoints: [{ x: 550, y: 160 }, { x: 575, y: 160 }, { x: 575, y: 300 }, { x: 470, y: 300 }, { x: 470, y: 160 }] },
-      { type: "elite", name: "딱걸이", boss: true, x: 940, y: 390, speed: 118, range: 280, hearing: 520, fov: 1.35, detectRate: 1.4, zone: { x: 820, y: 80, w: 300, h: 500 }, waypoints: [{ x: 940, y: 390 }, { x: 1080, y: 390 }, { x: 1080, y: 180 }, { x: 850, y: 180 }, { x: 850, y: 390 }] },
+      { type: "elite", name: "딱걸이 대장", boss: true, x: 940, y: 390, speed: 118, range: 280, hearing: 520, fov: 1.35, detectRate: 1.25, zone: { x: 820, y: 80, w: 300, h: 500 }, waypoints: [{ x: 940, y: 390 }, { x: 1080, y: 390 }, { x: 1080, y: 180 }, { x: 850, y: 180 }, { x: 850, y: 390 }] },
     ],
   },
 ];
@@ -394,6 +403,7 @@ let lastFrame = performance.now();
 let sampleAccumulator = 0;
 let particles = [];
 let noisePulses = [];
+let projectiles = [];
 let rewindAmount = 0;
 let shake = 0;
 let flash = 0;
@@ -414,6 +424,7 @@ let radarShieldBlocking = false;
 let runRadarHits = 0;
 let runRetries = 0;
 let wasSeenByAnyGuard = false;
+let doorTutorialShown = false;
 let unlocked = Math.max(1, Math.min(levels.length, Number(localStorage.getItem("loopHeistUnlocked")) || 1));
 let completed = Math.max(0, Math.min(levels.length, Number(localStorage.getItem("loopHeistCompleted")) || 0));
 unlocked = Math.max(unlocked, Math.min(levels.length, completed + 1));
@@ -492,6 +503,12 @@ function sound(name) {
   } else if (name === "timeBonus") {
     tone(root * 2, 0.08, "square", 0.028);
     tone(root * 3, 0.13, "square", 0.024, 0.07);
+  } else if (name === "arrow") {
+    tone(root * 4, 0.035, "square", 0.025);
+    tone(root * 2.5, 0.07, "triangle", 0.014, 0.025);
+  } else if (name === "net") {
+    tone(root * 1.5, 0.07, "square", 0.025);
+    tone(root * 0.75, 0.13, "sawtooth", 0.014, 0.04);
   }
 }
 
@@ -598,7 +615,8 @@ function escapeHtml(value) {
 
 function avatarMarkup(subject = profile, extraClass = "") {
   const safe = normalizeProfile(subject);
-  return `<span class="toy-avatar ${extraClass}" style="--avatar-color:${safe.color}" aria-hidden="true"><i>${escapeHtml(safe.face)}</i><b></b></span>`;
+  const faceIndex = Math.max(0, PROFILE_FACES.indexOf(safe.face));
+  return `<span class="toy-avatar ${extraClass}" data-face-index="${faceIndex}" style="--avatar-color:${safe.color}" aria-hidden="true"><i>${escapeHtml(safe.face)}</i><b></b></span>`;
 }
 
 function formatRecordTime(milliseconds) {
@@ -652,7 +670,7 @@ function updateStaticTranslations() {
 function showProfileOverlay() {
   state = "menu";
   const colorButtons = PROFILE_COLORS.map((color) => `<button class="profile-color ${color === profile.color ? "is-selected" : ""}" type="button" data-profile-color="${color}" style="--swatch:${color}" aria-label="${t(settings.language, "color")} ${color}"></button>`).join("");
-  const faceButtons = PROFILE_FACES.map((face) => `<button class="profile-face ${face === profile.face ? "is-selected" : ""}" type="button" data-profile-face="${escapeHtml(face)}">${escapeHtml(face)}</button>`).join("");
+  const faceButtons = PROFILE_FACES.map((face, index) => `<button class="profile-face ${face === profile.face ? "is-selected" : ""}" type="button" data-face-index="${index}" data-profile-face="${escapeHtml(face)}">${escapeHtml(face)}</button>`).join("");
   setOverlay(`
     <section class="panel toy-dialog profile-dialog" aria-labelledby="overlayTitle">
       <h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "profile")}</h2>
@@ -773,7 +791,7 @@ function showMenu(selectedIndex = null) {
   level = levels[levelIndex];
   const stageCopy = localizedStage(level);
   const best = getWorldTopRecords(completionRecords, level.code, 1)[0] || null;
-  const stillHero = reducedMotionQuery.matches ? "idle-1.png" : "animation.gif";
+  const stillHero = reducedMotionQuery.matches ? "walk-1.png" : "animation.gif";
   const stillBoss = reducedMotionQuery.matches ? "idle-1.png" : "animation.gif";
   applyTheme();
   updateStaticTranslations();
@@ -803,9 +821,9 @@ function showMenu(selectedIndex = null) {
       <div class="arcade-stage-card toy-stage-card" data-stage="${level.code}" data-theme="${level.theme.id}">
         <div class="arcade-stage-info">
           <div class="stage-heading">
-            <span class="stage-mascot"><img src="assets/sprites/hero-idle-v2/${stillHero}" alt="" aria-hidden="true"></span>
+            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.9.0" alt="" aria-hidden="true"></span>
             <div class="stage-heading__copy"><span class="arcade-rule">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length}</span><h2 class="stage-title"><span class="stage-title__local">${escapeHtml(stageCopy.title)}</span></h2><p class="stage-summary">${escapeHtml(stageCopy.rule)}</p></div>
-            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/boss-idle/${stillBoss}" alt="" aria-hidden="true"></span>` : ""}
+            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.9.0" alt="" aria-hidden="true"></span>` : ""}
           </div>
           <div class="stage-mission"><span>${t(settings.language, "currentGoal")}</span><b>${escapeHtml(stageCopy.cue)}</b></div>
           <div class="arcade-stats"><span>${t(settings.language, "difficulty")} ${level.difficulty}/${levels.length}</span><span>${t(settings.language, "best")} ${best ? formatRecordScore(best) : "--"}</span></div>
@@ -821,6 +839,12 @@ function showMenu(selectedIndex = null) {
   document.querySelector("#recordsAction").addEventListener("click", () => showRecordsOverlay(levelIndex));
   document.querySelector("#settingsAction").addEventListener("click", showSettingsOverlay);
   document.querySelectorAll("[data-stage-select]").forEach((button) => button.addEventListener("click", () => showMenu(Number(button.dataset.stageSelect))));
+  requestAnimationFrame(() => {
+    const rail = document.querySelector(".toy-rail");
+    const currentStage = rail?.querySelector(".world-node.is-current");
+    if (!rail || !currentStage) return;
+    rail.scrollLeft = Math.max(0, currentStage.offsetLeft - (rail.clientWidth - currentStage.offsetWidth) / 2);
+  });
 }
 
 function makeRecord() {
@@ -857,6 +881,10 @@ function createGuards() {
       confusedUntil: 0,
       seesCurrent: false,
       stuckFor: 0,
+      weaponReadyAt: 650 + index * 90,
+      aimStartedAt: null,
+      aimTargetId: null,
+      aimTargetPoint: null,
     };
   });
 }
@@ -881,6 +909,7 @@ function startLevel(index = levelIndex) {
   runRadarHits = 0;
   runRetries = 0;
   wasSeenByAnyGuard = false;
+  doorTutorialShown = false;
   stageStartedAt = 0;
   lastClearResult = null;
   gameStats.plays += 1;
@@ -922,6 +951,7 @@ function resetLoop(withEffect = true, preserveStick = false) {
   radarShieldBlocking = false;
   guards = createGuards();
   noisePulses = [];
+  projectiles = [];
   plateStates = new Map(level.plates.map((plate) => [plate.id, false]));
   doorStates = level.doors.map(() => false);
   echoes.forEach((echo) => {
@@ -938,7 +968,8 @@ function resetLoop(withEffect = true, preserveStick = false) {
 }
 
 function saveAndRewind() {
-  if (state !== "playing") return;
+  if (state !== "playing" && state !== "awaiting-save") return;
+  recordCurrentPose();
   const moved = currentRecord.frames.some((frame) => dist(frame, level.start) > 5);
   const hasAction = currentRecord.events.length > 0;
   if (!moved && !hasAction) {
@@ -959,26 +990,29 @@ function saveAndRewind() {
     x: level.start.x,
     y: level.start.y,
     angle: -Math.PI / 2,
+    radius: PLAYER_RADIUS,
     eventIndex: 0,
     colorIndex: echoes.length,
   });
   gameStats.echoes += 1;
   saveStats();
   loopNumber += 1;
-  resetLoop(true, true);
+  state = "playing";
+  resetLoop(true);
   showToast(t(settings.language, "echoSaved", { value: echoes.length }), 1100);
 }
 
 function restartCurrentLoop() {
-  if (state !== "playing") return;
+  if (state !== "playing" && state !== "awaiting-save") return;
   runRetries += 1;
   loopNumber += 1;
+  state = "playing";
   resetLoop(true);
   showToast(t(settings.language, "retry"), 700);
 }
 
 function restartWholeLevel() {
-  if (state !== "playing" && state !== "caught") return;
+  if (state !== "playing" && state !== "caught" && state !== "awaiting-save") return;
   echoes = [];
   loopNumber = 1;
   loopLimit = LOOP_DURATION;
@@ -992,6 +1026,7 @@ function restartWholeLevel() {
   runRadarHits = 0;
   runRetries = 0;
   wasSeenByAnyGuard = false;
+  doorTutorialShown = false;
   resetLoop(true);
   state = "playing";
   showToast(t(settings.language, "reset"), 700);
@@ -1005,16 +1040,27 @@ function undoLastEcho() {
   echoes.pop();
   loopNumber = echoes.length + 1;
   resetLoop(true);
-  showToast(`${t(settings.language, "echoName")} −1`, 700);
+  showToast(t(settings.language, "echoRemoved"), 800);
 }
 
-function sampleRecording() {
-  currentRecord.frames.push({
-    t: Math.min(loopElapsed, loopLimit),
+function recordCurrentPose(time = loopElapsed) {
+  const frame = {
+    t: Math.min(time, loopLimit),
     x: player.x,
     y: player.y,
     angle: player.angle,
-  });
+  };
+  const last = currentRecord.frames[currentRecord.frames.length - 1];
+  if (last && Math.abs(last.t - frame.t) < 0.01) {
+    Object.assign(last, frame);
+    return last;
+  }
+  currentRecord.frames.push(frame);
+  return frame;
+}
+
+function sampleRecording() {
+  recordCurrentPose();
 }
 
 function poseAt(recording, time) {
@@ -1079,6 +1125,13 @@ function getSolidRects() {
   return solids;
 }
 
+function showDoorTutorial() {
+  if (doorTutorialShown) return false;
+  doorTutorialShown = true;
+  showToast(t(settings.language, "doorTutorial"), 3600);
+  return true;
+}
+
 function circleHitsRect(entity, rect) {
   const closestX = clamp(entity.x, rect.x, rect.x + rect.w);
   const closestY = clamp(entity.y, rect.y, rect.y + rect.h);
@@ -1088,10 +1141,12 @@ function circleHitsRect(entity, rect) {
 }
 
 function moveCircle(entity, dx, dy, solids = getSolidRects()) {
+  const collisions = new Set();
   entity.x += dx;
   entity.x = clamp(entity.x, 66 + entity.radius, W - 66 - entity.radius);
   for (const rect of solids) {
     if (!circleHitsRect(entity, rect)) continue;
+    collisions.add(rect);
     if (dx > 0) entity.x = rect.x - entity.radius;
     else if (dx < 0) entity.x = rect.x + rect.w + entity.radius;
   }
@@ -1099,9 +1154,11 @@ function moveCircle(entity, dx, dy, solids = getSolidRects()) {
   entity.y = clamp(entity.y, 56 + entity.radius, H - 56 - entity.radius);
   for (const rect of solids) {
     if (!circleHitsRect(entity, rect)) continue;
+    collisions.add(rect);
     if (dy > 0) entity.y = rect.y - entity.radius;
     else if (dy < 0) entity.y = rect.y + rect.h + entity.radius;
   }
+  return collisions;
 }
 
 function collectStageItem(item) {
@@ -1168,9 +1225,14 @@ function updatePlayer(dt) {
     dy /= length;
     player.angle = Math.atan2(dy, dx);
     const beforeMove = { x: player.x, y: player.y };
-    moveCircle(player, dx * PLAYER_SPEED * dt * speedScale, dy * PLAYER_SPEED * dt * speedScale);
+    const collisions = moveCircle(player, dx * PLAYER_SPEED * dt * speedScale, dy * PLAYER_SPEED * dt * speedScale);
+    const hitClosedDoor = level.doors.some((door, index) => !doorStates[index] && collisions.has(door));
+    if (hitClosedDoor) showDoorTutorial();
     if (followingTarget && moveTarget) {
-      if (dist(beforeMove, player) < 0.2) moveTargetStuckFor += dt;
+      if (hitClosedDoor) {
+        moveTarget = null;
+        moveTargetStuckFor = 0;
+      } else if (dist(beforeMove, player) < 0.2) moveTargetStuckFor += dt;
       else moveTargetStuckFor = 0;
       if (moveTargetStuckFor > 0.38) {
         moveTarget = null;
@@ -1347,6 +1409,113 @@ function canSee(guard, actor, visionPolygon = buildVisionPolygon(guard)) {
   return circleIntersectsPolygon({ x: actor.x, y: actor.y, radius }, visionPolygon);
 }
 
+function projectileKindForGuard(guard) {
+  if (guard.type === "watcher") return "arrow";
+  if (guard.type === "chaser") return "net";
+  return null;
+}
+
+function clearGuardAim(guard) {
+  guard.aimStartedAt = null;
+  guard.aimTargetId = null;
+  guard.aimTargetPoint = null;
+}
+
+function updateGuardWeapon(guard, target, clock) {
+  const kind = projectileKindForGuard(guard);
+  if (!kind || !target || clock < guard.confusedUntil || clock < guard.weaponReadyAt) {
+    if (!target || clock < guard.confusedUntil) clearGuardAim(guard);
+    return;
+  }
+
+  const profile = PROJECTILE_PROFILES[kind];
+  if (guard.aimTargetId !== target.id || guard.aimStartedAt == null) {
+    guard.aimStartedAt = clock;
+    guard.aimTargetId = target.id;
+    // 예고가 시작된 순간의 위치를 고정한다. 플레이어는 선을 보고 옆으로
+    // 피할 수 있고, 발사 뒤에는 탄이 갑자기 방향을 꺾지 않는다.
+    guard.aimTargetPoint = { x: target.x, y: target.y };
+  }
+  if (clock - guard.aimStartedAt < profile.telegraphMs) return;
+
+  try {
+    const launch = createProjectileLaunch(
+      { x: guard.x, y: guard.y },
+      guard.aimTargetPoint,
+      kind,
+    );
+    projectiles.push({
+      id: `${kind}-${guard.id}-${Math.round(clock)}`,
+      kind,
+      ownerId: guard.id,
+      targetId: target.id,
+      launch,
+      spawnedAtMs: clock,
+      ageMs: 0,
+      lifetimeMs: launch.lifetimeMs,
+      position: { x: launch.origin.x, y: launch.origin.y, z: 0 },
+      angle: Math.atan2(launch.velocity.y, launch.velocity.x),
+    });
+    sound(kind);
+    showSoundCaption(kind === "arrow" ? "arrowShot" : "netShot", guard);
+  } catch {
+    // 목표와 경비가 정확히 겹친 한 프레임에는 발사 대신 접촉 판정을 사용한다.
+  }
+  guard.weaponReadyAt = clock + profile.cooldownMs;
+  clearGuardAim(guard);
+}
+
+function updateProjectiles(dt) {
+  if (!projectiles.length) return;
+  const solids = getSolidRects();
+  // 분신과 현재의 내가 정확히 겹친 순간에는 분신이 탄을 대신 맞아야
+  // 미끼 규칙이 예측 가능하다.
+  const actors = [...echoes, player];
+  const survivors = [];
+
+  for (const projectile of projectiles) {
+    const previous = projectile.position;
+    projectile.ageMs = projectileElapsedMs(loopElapsed, projectile.spawnedAtMs);
+    const sampled = projectileFlightPosition(projectile.launch, projectile.ageMs / 1000);
+    const next = { x: sampled.x, y: sampled.y, z: sampled.z };
+    const hit = firstSweptCollision(previous, next, {
+      walls: solids,
+      targets: actors,
+      projectileRadius: projectile.launch.radius,
+    });
+
+    if (hit) {
+      projectile.position = { x: hit.point.x, y: hit.point.y, z: next.z };
+      if (hit.kind === "wall") {
+        burst(hit.point.x, hit.point.y, projectile.kind === "arrow" ? "#ffd166" : "#62e7ff", 7, 55);
+      } else if (hit.collider === player) {
+        burst(hit.point.x, hit.point.y, projectile.kind === "arrow" ? "#ff617d" : "#62e7ff", 15, 100);
+        catchPlayer(projectile.kind === "arrow" ? "arrowHit" : "netHit");
+      } else {
+        const owner = guards.find((guard) => guard.id === projectile.ownerId);
+        if (owner) {
+          owner.confusedUntil = loopElapsed + 650;
+          owner.modeUntil = 0;
+          owner.targetId = null;
+          owner.targetPoint = null;
+          owner.mode = "confused";
+          clearGuardAim(owner);
+        }
+        burst(hit.point.x, hit.point.y, "#62e7ff", 12, 85);
+      }
+      continue;
+    }
+
+    projectile.position = next;
+    if (sampled.landed || shouldRemoveProjectile(projectile, undefined, 24)) {
+      burst(next.x, next.y, projectile.kind === "arrow" ? "#ffd166" : "#62e7ff", 5, 45);
+      continue;
+    }
+    survivors.push(projectile);
+  }
+  projectiles = survivors;
+}
+
 function updateGuards(dt) {
   const clock = loopElapsed;
   const actors = [player, ...echoes];
@@ -1366,6 +1535,7 @@ function updateGuards(dt) {
     guard.seesCurrent = false;
     if (clock < guard.confusedUntil) {
       guard.visionPolygon = [];
+      clearGuardAim(guard);
       continue;
     }
 
@@ -1435,19 +1605,25 @@ function updateGuards(dt) {
       guard.bossAlertCaptioned = true;
       showSoundCaption("bossAlert", guard);
     }
-    if (seesCurrent) currentDetectionRates.push(guard.detectRate);
+    // 궁수와 그물총병은 발사체가 주 포획 수단이다. 레이더 게이지가 탄보다
+    // 먼저 플레이어를 잡지 않도록 시야 누적은 경고 수준으로 낮춘다.
+    if (seesCurrent) currentDetectionRates.push(guard.detectRate * (projectileKindForGuard(guard) ? 0.35 : 1));
 
+    let weaponTarget = null;
     if (visible.length) {
       // 에코는 미끼 역할을 유지하지만, 실제 플레이어가 함께 보이면 발각 게이지는
       // 별도로 오른다. 시야가 끊긴 뒤에는 마지막으로 본 위치만 조사한다.
       const visibleEchoes = visible.filter((actor) => actor.id !== player.id)
         .sort((a, b) => dist(guard, a) - dist(guard, b));
       const target = visibleEchoes[0] || player;
+      weaponTarget = target;
       guard.targetId = target.id;
       guard.targetPoint = { x: target.x, y: target.y };
       guard.mode = "chase";
       guard.modeUntil = clock + 1350;
     }
+
+    updateGuardWeapon(guard, weaponTarget, clock);
 
     if (dist(guard, player) < guard.radius + player.radius) return catchPlayer();
     for (const echo of echoes) {
@@ -1481,7 +1657,7 @@ function updateGuards(dt) {
   if (player.exposure >= 1) catchPlayer();
 }
 
-function catchPlayer() {
+function catchPlayer(reasonKey = "caught") {
   if (state !== "playing") return;
   state = "caught";
   caughtTimer = 0.8;
@@ -1491,8 +1667,8 @@ function catchPlayer() {
   runRetries += 1;
   saveStats();
   sound("caught");
-  showToast(t(settings.language, "caught"), 800);
-  showSoundCaption("caught", player);
+  showToast(t(settings.language, reasonKey), 800);
+  showSoundCaption(reasonKey, player);
 }
 
 function completeLevel() {
@@ -1672,7 +1848,8 @@ function update(dt, now) {
       stageStartedAt = performance.now();
       goFlashRemaining = 0.34;
       tone(level.music.root * 3, 0.12, "square", 0.03);
-      showToast(localizedStage(level).rule, 900);
+      if (level.doors.length) showToast(t(settings.language, "doorTutorial"), 2800);
+      else showToast(localizedStage(level).rule, 900);
     }
     updateHud();
     return;
@@ -1708,6 +1885,11 @@ function update(dt, now) {
   updatePlayer(gameplayDt);
   updatePlatesAndDoors();
   updateGuards(gameplayDt);
+  if (state === "playing") updateProjectiles(gameplayDt);
+  if (state !== "playing") {
+    updateHud();
+    return;
+  }
 
   sampleAccumulator += gameplayDt * 1000;
   while (sampleAccumulator >= SAMPLE_INTERVAL) {
@@ -1716,10 +1898,11 @@ function update(dt, now) {
   }
 
   if (loopElapsed >= loopLimit && state === "playing") {
-    runRetries += 1;
-    loopNumber += 1;
-    resetLoop(true, true);
-    showToast(t(settings.language, "saveWithX"), 1000);
+    recordCurrentPose(loopLimit);
+    state = "awaiting-save";
+    resetStickInput();
+    moveTarget = null;
+    showToast(t(settings.language, "saveWithX"), 2800);
   }
   updateHud();
 }
@@ -1740,7 +1923,12 @@ function updateHud() {
   }
   ui.touchActions.forEach((button) => {
     const action = button.dataset.gameAction;
-    if (!['menu', 'mute'].includes(action)) button.disabled = state !== "playing";
+    if (!['menu', 'mute'].includes(action)) {
+      const canSaveFrozenLoop = action === "save" && state === "awaiting-save";
+      const canRestartFrozenLoop = action === "restart" && state === "awaiting-save";
+      const hasPlayableState = state === "playing" || canSaveFrozenLoop || canRestartFrozenLoop;
+      button.disabled = !hasPlayableState || (action === "undo" && echoes.length === 0);
+    }
     if (action === "mute") {
       button.setAttribute("aria-pressed", String(muted));
       const label = button.querySelector("small, span:last-child");
@@ -1758,12 +1946,28 @@ function updateHud() {
     treasure: { collected: treasureCollected, value: treasureValueCollected, nameKey: level.treasure?.nameKey },
     items: { collected: [...collectedItemIds], bonus: itemBonusScore, shieldCharges: radarShieldCharges },
     player: player ? { x: Math.round(player.x), y: Math.round(player.y), hasGem: player.hasGem, exposure: Number(player.exposure.toFixed(2)) } : null,
-    echoes: echoes.map((echo) => ({ x: Math.round(echo.x), y: Math.round(echo.y) })),
+    echoes: echoes.map((echo) => {
+      const savedEnd = echo.recording.frames[echo.recording.frames.length - 1];
+      return {
+        x: Math.round(echo.x),
+        y: Math.round(echo.y),
+        savedEnd: savedEnd ? { t: Math.round(savedEnd.t), x: Math.round(savedEnd.x), y: Math.round(savedEnd.y) } : null,
+      };
+    }),
     plates: Object.fromEntries(plateStates),
     doors: [...doorStates],
+    doorTutorialShown,
     guards: guards.map((guard) => ({
       name: guard.name, type: guard.type, x: Math.round(guard.x), y: Math.round(guard.y),
       mode: guard.mode, seesCurrent: guard.seesCurrent, range: guard.range, detectRate: guard.detectRate,
+      aiming: guard.aimStartedAt != null,
+    })),
+    projectiles: projectiles.map((projectile) => ({
+      kind: projectile.kind,
+      x: Math.round(projectile.position.x),
+      y: Math.round(projectile.position.y),
+      z: Math.round(projectile.position.z || 0),
+      ageMs: Math.round(projectile.ageMs),
     })),
     stick: { x: Number(stickInput.x.toFixed(2)), y: Number(stickInput.y.toFixed(2)), magnitude: Number(stickInput.magnitude.toFixed(2)) },
     moveTarget: moveTarget ? { x: Math.round(moveTarget.x), y: Math.round(moveTarget.y) } : null,
@@ -2008,13 +2212,18 @@ function drawPlatesAndDoors(now) {
     ctx.fillRect(-7, -3, 4, 6);
     ctx.fillRect(3, -3, 4, 6);
     ctx.fillStyle = active ? "#d9fff2" : "#6a9baa";
-    ctx.font = '900 10px "Galmuri11", "Malgun Gothic", sans-serif';
+    const plateLabel = t(settings.language, "echoPlate", { value: plateIndex + 1 });
+    const plateFontSize = Math.max(10, worldUnitsForCssPixels(11));
+    const plateLabelHeight = worldUnitsForCssPixels(18);
+    const plateLabelY = visualRadius + worldUnitsForCssPixels(13);
+    ctx.font = `900 ${plateFontSize}px "Galmuri11", "Malgun Gothic", sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    const plateLabelWidth = ctx.measureText(plateLabel).width + worldUnitsForCssPixels(12);
     ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(-49, 27, 98, 17);
+    ctx.fillRect(-plateLabelWidth / 2, plateLabelY - plateLabelHeight / 2, plateLabelWidth, plateLabelHeight);
     ctx.fillStyle = active ? "#d9fff2" : "#ffffff";
-    ctx.fillText(t(settings.language, "echoPlate", { value: plateIndex + 1 }), 0, 36);
+    ctx.fillText(plateLabel, 0, plateLabelY);
     ctx.restore();
   });
 
@@ -2038,11 +2247,20 @@ function drawPlatesAndDoors(now) {
         ctx.beginPath(); ctx.moveTo(door.x + 4, y); ctx.lineTo(door.x + door.w - 4, y); ctx.stroke();
       }
     }
-    ctx.fillStyle = open ? "#7bffd4" : "#ff6b86";
-    ctx.font = "800 10px Segoe UI";
-    ctx.textAlign = "center";
+    ctx.shadowBlur = 0;
     const doorNumber = Math.max(1, level.plates.findIndex((plate) => plate.id === door.plateId) + 1);
-    ctx.fillText(`${doorNumber} ${t(settings.language, open ? "open" : "lock")}`, door.x + door.w / 2, door.y - 8);
+    const doorLabel = t(settings.language, open ? "doorOpenLabel" : "doorLockedLabel", { value: doorNumber });
+    const doorFontSize = Math.max(10, worldUnitsForCssPixels(11));
+    const doorLabelHeight = worldUnitsForCssPixels(18);
+    const doorLabelY = door.y - worldUnitsForCssPixels(12);
+    ctx.font = `900 ${doorFontSize}px "Galmuri11", "Malgun Gothic", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const doorLabelWidth = ctx.measureText(doorLabel).width + worldUnitsForCssPixels(12);
+    ctx.fillStyle = ACTOR_COLORS.outline;
+    ctx.fillRect(door.x + door.w / 2 - doorLabelWidth / 2, doorLabelY - doorLabelHeight / 2, doorLabelWidth, doorLabelHeight);
+    ctx.fillStyle = open ? "#d9fff2" : "#ffd5df";
+    ctx.fillText(doorLabel, door.x + door.w / 2, doorLabelY);
     ctx.restore();
   });
 }
@@ -2272,7 +2490,131 @@ function drawVisionCones() {
   }
 }
 
+function drawWeaponTelegraphs() {
+  for (const guard of guards) {
+    const kind = projectileKindForGuard(guard);
+    if (!kind || guard.aimStartedAt == null || !guard.aimTargetPoint) continue;
+    const profile = PROJECTILE_PROFILES[kind];
+    const progress = clamp((loopElapsed - guard.aimStartedAt) / profile.telegraphMs, 0, 1);
+    const color = kind === "arrow" ? "#ff9f43" : "#35cff2";
+    const target = guard.aimTargetPoint;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2 + progress * 2;
+    ctx.globalAlpha = 0.5 + progress * 0.4;
+    ctx.setLineDash(kind === "arrow" ? [10, 7] : [5, 6]);
+    ctx.beginPath();
+    ctx.moveTo(guard.x, guard.y);
+    ctx.lineTo(target.x, target.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const radius = kind === "arrow" ? 11 + progress * 4 : 15 + progress * 5;
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillRect(target.x - 2, target.y - radius - 5, 4, 6);
+    ctx.restore();
+  }
+}
+
+function drawProjectiles() {
+  for (const projectile of projectiles) {
+    const { x, y, z = 0 } = projectile.position;
+    ctx.save();
+    ctx.globalAlpha = clamp(0.25 + (1 - z / Math.max(1, projectile.launch.apexHeight)) * 0.35, 0.2, 0.6);
+    ctx.fillStyle = ACTOR_COLORS.outline;
+    if (projectile.kind === "arrow") ctx.fillRect(x - 8, y - 2, 16, 4);
+    else {
+      ctx.beginPath();
+      ctx.ellipse(x, y, 12, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.translate(Math.round(x), Math.round(y - z));
+    if (projectile.kind === "arrow") {
+      ctx.rotate(projectile.angle);
+      ctx.strokeStyle = ACTOR_COLORS.outline;
+      ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(10, 0); ctx.stroke();
+      ctx.strokeStyle = "#ffd166";
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(10, 0); ctx.stroke();
+      ctx.fillStyle = "#ff7a33";
+      ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(7, -5); ctx.lineTo(7, 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#fff1ce";
+      ctx.fillRect(-15, -5, 4, 10);
+    } else {
+      const radius = 11 + Math.sin(projectile.ageMs / 55) * 1.5;
+      ctx.fillStyle = ACTOR_COLORS.outline;
+      ctx.beginPath(); ctx.arc(0, 0, radius + 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#62e7ff";
+      ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#15506d";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-radius, 0); ctx.lineTo(radius, 0); ctx.moveTo(0, -radius); ctx.lineTo(0, radius); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, radius * 0.55, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function drawHeldTreasure(actor, spriteSize = 48) {
+  if (actor !== player || !player.hasGem) return;
+  ctx.save();
+  ctx.translate(Math.round(actor.x), Math.round(actor.y - spriteSize * 0.58));
+  ctx.fillStyle = ACTOR_COLORS.outline;
+  ctx.fillRect(-7, -7, 14, 14);
+  ctx.fillStyle = level.treasure?.palette?.main || ACTOR_COLORS.target;
+  ctx.fillRect(-5, -5, 10, 10);
+  ctx.fillStyle = level.treasure?.palette?.light || "#fff4a8";
+  ctx.fillRect(-1, -4, 4, 4);
+  ctx.restore();
+}
+
+function drawDuckAgentSprite(actor, isEcho, index) {
+  const sprite = duckSpriteFor(actor.angle, loopElapsed, state === "playing");
+  if (!imageReady(sprite)) return false;
+  const echoPalette = ECHO_COLORS[index % ECHO_COLORS.length];
+  const size = renderView.zoomed ? 68 : 58;
+  const x = Math.round(actor.x);
+  const y = Math.round(actor.y);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.globalAlpha = isEcho ? 0.28 : 0.24;
+  ctx.fillStyle = isEcho ? echoPalette.body : ACTOR_COLORS.outline;
+  ctx.fillRect(x - size * 0.34, y + size * 0.31, size * 0.68, Math.max(3, size * 0.1));
+  if (isEcho) {
+    ctx.globalAlpha = 0.32;
+    ctx.fillStyle = echoPalette.body;
+    ctx.fillRect(x - size * 0.48, y - size * 0.48, size * 0.96, size * 0.96);
+  }
+  ctx.globalAlpha = isEcho ? 0.72 : 1;
+  ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size);
+  if (isEcho) {
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = echoPalette.trim;
+    ctx.lineWidth = Math.max(2, size * 0.05);
+    ctx.setLineDash([5, 4]);
+    ctx.strokeRect(x - size * 0.46, y - size * 0.46, size * 0.92, size * 0.92);
+    ctx.setLineDash([]);
+    const badgeSize = Math.max(16, Math.min(28, worldUnitsForCssPixels(14)));
+    const badgeY = y - size * 0.57;
+    ctx.fillStyle = ACTOR_COLORS.outline;
+    ctx.fillRect(x - badgeSize / 2, badgeY - badgeSize / 2, badgeSize, badgeSize);
+    ctx.fillStyle = echoPalette.trim;
+    ctx.font = `900 ${badgeSize * 0.62}px "Galmuri11", "Malgun Gothic", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(index + 1), x, badgeY + 1);
+  }
+  ctx.restore();
+  if (!isEcho) drawHeldTreasure(actor, size);
+  return true;
+}
+
 function drawAgent(actor, isEcho = false, index = 0) {
+  if (drawDuckAgentSprite(actor, isEcho, index)) return;
   const unit = renderView.zoomed ? 3 : 2;
   const echoPalette = ECHO_COLORS[index % ECHO_COLORS.length];
   const bodyColor = isEcho ? echoPalette.body : resolvedPlayerColor();
@@ -2343,17 +2685,7 @@ function drawAgent(actor, isEcho = false, index = 0) {
   }
   ctx.restore();
 
-  if (!isEcho && player.hasGem) {
-    ctx.save();
-    ctx.translate(Math.round(actor.x), Math.round(actor.y - unit * 11));
-    ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(-6, -6, 12, 12);
-    ctx.fillStyle = level.treasure?.palette?.main || ACTOR_COLORS.target;
-    ctx.fillRect(-4, -4, 8, 8);
-    ctx.fillStyle = level.treasure?.palette?.light || "#fff4a8";
-    ctx.fillRect(-1, -3, 3, 3);
-    ctx.restore();
-  }
+  if (!isEcho) drawHeldTreasure(actor, unit * 22);
 }
 
 function drawEchoTrail(echo, index) {
@@ -2381,6 +2713,43 @@ function drawEchoTrail(echo, index) {
   ctx.restore();
 }
 
+function drawGuardStatusLabel(guard, unit, alerted, labelY) {
+  const labelFontSize = Math.max(guard.boss ? 14 : 11, Math.min(28, worldUnitsForCssPixels(11)));
+  ctx.save();
+  ctx.font = `900 ${labelFontSize}px "Galmuri11", "Malgun Gothic", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  if (guard.boss) {
+    const width = Math.max(72, ctx.measureText(`${t(settings.language, "boss")}·Z`).width + 16);
+    ctx.fillStyle = ACTOR_COLORS.outline;
+    ctx.fillRect(guard.x - width / 2, labelY - labelFontSize * 0.7, width, labelFontSize * 1.4);
+    ctx.fillStyle = "#fff1b6";
+    ctx.fillText(`${t(settings.language, "boss")}·Z`, guard.x, labelY);
+  } else if (alerted) {
+    const size = Math.max(18, labelFontSize * 1.35);
+    ctx.fillStyle = ACTOR_COLORS.danger;
+    ctx.fillRect(guard.x - size / 2, labelY - size / 2, size, size);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("!", guard.x, labelY + 1);
+  } else {
+    const marker = { sleepy: "●", listener: "♪", watcher: "➶", scanner: "☀", chaser: "⊕", elite: "★" }[guard.type] || guard.symbol;
+    const size = Math.max(18, labelFontSize * 1.35);
+    ctx.fillStyle = ACTOR_COLORS.guardDark;
+    ctx.fillRect(guard.x - size / 2, labelY - size / 2, size, size);
+    ctx.fillStyle = "#fff0d0";
+    ctx.fillText(marker, guard.x, labelY + 1);
+  }
+  if (loopElapsed < guard.confusedUntil) {
+    const confusedY = labelY - (guard.boss ? 26 : 22);
+    const size = Math.max(20, labelFontSize * 1.45);
+    ctx.fillStyle = ACTOR_COLORS.echoDark;
+    ctx.fillRect(guard.x - size / 2, confusedY - size / 2, size, size);
+    ctx.fillStyle = "#d8fbff";
+    ctx.fillText("?", guard.x, confusedY + 1);
+  }
+  ctx.restore();
+}
+
 function drawGuard(guard, now) {
   const alerted = guard.seesCurrent || guard.targetPoint;
   const unit = guard.boss ? 3 : renderView.zoomed ? 3 : 2;
@@ -2388,6 +2757,35 @@ function drawGuard(guard, now) {
   const trimColor = alerted ? ACTOR_COLORS.danger : guard.color;
   const facingX = Math.cos(guard.angle);
   const facingY = Math.sin(guard.angle);
+  const sprite = guardSpriteFor(guard.type, guard.angle);
+  if (imageReady(sprite)) {
+    const size = guard.boss ? (renderView.zoomed ? 90 : 82) : (renderView.zoomed ? 76 : 66);
+    const x = Math.round(guard.x);
+    const y = Math.round(guard.y);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = ACTOR_COLORS.outline;
+    ctx.fillRect(x - size * 0.34, y + size * 0.31, size * 0.68, Math.max(3, size * 0.1));
+    if (guard.boss) {
+      const haloPhase = reducedMotionQuery.matches ? -1 : Math.floor(now / 160) % 4;
+      [[0, -0.55], [0.55, 0], [0, 0.55], [-0.55, 0]].forEach(([dx, dy], index) => {
+        ctx.fillStyle = index === haloPhase ? "#fff3a8" : ACTOR_COLORS.bossGold;
+        const dot = Math.max(5, size * 0.09);
+        ctx.fillRect(x + dx * size - dot / 2, y + dy * size - dot / 2, dot, dot);
+      });
+    }
+    ctx.globalAlpha = 1;
+    ctx.drawImage(sprite, x - size / 2, y - size / 2, size, size);
+    if (alerted) {
+      ctx.strokeStyle = ACTOR_COLORS.danger;
+      ctx.lineWidth = Math.max(3, size * 0.05);
+      ctx.strokeRect(x - size * 0.43, y - size * 0.45, size * 0.86, size * 0.88);
+    }
+    ctx.restore();
+    drawGuardStatusLabel(guard, unit, alerted, guard.y - size * 0.56);
+    return;
+  }
   ctx.save();
   ctx.translate(Math.round(guard.x), Math.round(guard.y));
 
@@ -2463,37 +2861,7 @@ function drawGuard(guard, now) {
   ctx.strokeRect(-7 * unit, -7 * unit, 14 * unit, 14 * unit);
   ctx.restore();
 
-  const labelY = guard.y - unit * (guard.boss ? 15 : 11);
-  ctx.save();
-  ctx.font = `900 ${guard.boss ? 13 : renderView.zoomed ? 12 : 9}px "Cascadia Mono", Consolas, monospace`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  if (guard.boss) {
-    ctx.fillStyle = ACTOR_COLORS.outline;
-    ctx.fillRect(guard.x - 33, labelY - 8, 66, 16);
-    ctx.fillStyle = "#fff1b6";
-    ctx.fillText(`${t(settings.language, "boss")}·Z`, guard.x, labelY);
-  } else if (alerted) {
-    ctx.fillStyle = ACTOR_COLORS.danger;
-    ctx.fillRect(guard.x - 8, labelY - 8, 16, 16);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText("!", guard.x, labelY);
-  } else {
-    const marker = { sleepy: "Z", listener: "♪", watcher: "◎", scanner: "↻", chaser: "»", elite: "◆" }[guard.type] || guard.symbol;
-    ctx.fillStyle = ACTOR_COLORS.guardDark;
-    ctx.fillRect(guard.x - 8, labelY - 7, 16, 14);
-    ctx.fillStyle = "#fff0d0";
-    ctx.fillText(marker, guard.x, labelY);
-  }
-  if (loopElapsed < guard.confusedUntil) {
-    const confusedY = labelY - (guard.boss ? 20 : 17);
-    ctx.fillStyle = ACTOR_COLORS.echoDark;
-    ctx.fillRect(guard.x - 9, confusedY - 9, 18, 18);
-    ctx.fillStyle = "#d8fbff";
-    ctx.font = '900 13px "Cascadia Mono", Consolas, monospace';
-    ctx.fillText("?", guard.x, confusedY);
-  }
-  ctx.restore();
+  drawGuardStatusLabel(guard, unit, alerted, guard.y - unit * (guard.boss ? 15 : 11));
 }
 
 function drawNoise() {
@@ -2558,6 +2926,11 @@ function syncCanvasSize() {
   canvasSizeDirty = false;
 }
 
+function worldUnitsForCssPixels(value) {
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  return (value * pixelRatio) / Math.max(renderView.scale, 0.001);
+}
+
 function updateRenderView() {
   syncCanvasSize();
   const portrait = window.matchMedia("(orientation: portrait) and (max-width: 760px)").matches;
@@ -2620,6 +2993,7 @@ function render(now) {
   drawGrid();
   drawThemeDecor(visualNow);
   drawVisionCones();
+  drawWeaponTelegraphs();
   drawWorldLabels();
   drawExit(visualNow);
   drawPlatesAndDoors(visualNow);
@@ -2629,9 +3003,10 @@ function render(now) {
   drawMoveTarget(visualNow);
   echoes.forEach(drawEchoTrail);
   drawNoise();
+  if (player) drawAgent(player, false, 0);
   echoes.forEach((echo, index) => drawAgent(echo, true, index));
   guards.forEach((guard) => drawGuard(guard, visualNow));
-  if (player) drawAgent(player, false, 0);
+  drawProjectiles();
   drawParticles();
   if (!reducedMotionQuery.matches && rewindAmount > 0) {
     ctx.globalCompositeOperation = "screen";
@@ -2739,9 +3114,21 @@ function runGameAction(action) {
 
 window.addEventListener("keydown", (event) => {
   const interactive = event.target instanceof Element && event.target.closest("button, a, input, select, textarea, [contenteditable='true']");
-  if (event.code === "Escape" && ["playing", "countdown", "complete", "caught"].includes(state)) {
+  if (event.code === "Escape" && ["playing", "countdown", "complete", "caught", "awaiting-save"].includes(state)) {
     event.preventDefault();
     showMenu();
+    return;
+  }
+  if (state === "awaiting-save") {
+    if (interactive && ["Space", "Enter"].includes(event.code)) return;
+    if (event.repeat && ["KeyX", "KeyR", "Backspace", "KeyM"].includes(event.code)) return;
+    if (event.code === "KeyX") saveAndRewind();
+    if (event.code === "KeyR") restartCurrentLoop();
+    if (event.code === "Backspace") {
+      event.preventDefault();
+      restartWholeLevel();
+    }
+    if (event.code === "KeyM") toggleMute();
     return;
   }
   if (state !== "playing") return;
@@ -2833,9 +3220,13 @@ window.__LOOP_HEIST_DEBUG__ = {
     treasure: { collected: treasureCollected, value: treasureValueCollected, nameKey: level.treasure?.nameKey },
     items: { collected: [...collectedItemIds], bonus: itemBonusScore, shieldCharges: radarShieldCharges },
     player: player ? { x: player.x, y: player.y, hasGem: player.hasGem, exposure: player.exposure } : null,
-    echoes: echoes.map((echo) => ({ x: echo.x, y: echo.y })),
+    echoes: echoes.map((echo) => {
+      const savedEnd = echo.recording.frames[echo.recording.frames.length - 1];
+      return { x: echo.x, y: echo.y, savedEnd: savedEnd ? { ...savedEnd } : null };
+    }),
     plates: Object.fromEntries(plateStates),
     doors: [...doorStates],
+    doorTutorialShown,
     guards: guards.map((guard) => ({ x: guard.x, y: guard.y, type: guard.type, mode: guard.mode, seesCurrent: guard.seesCurrent })),
     input: { stick: { x: stickInput.x, y: stickInput.y, magnitude: stickInput.magnitude, active: stickInput.pointerId != null } },
     moveTarget: moveTarget ? { ...moveTarget } : null,

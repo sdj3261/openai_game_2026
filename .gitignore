@@ -1,5 +1,12 @@
 # Rejected local sprite draft; the accepted asset is hero-idle-v2.
 /assets/sprites/hero-idle/
+# Agent Sprite Forge의 첫 4x4 실험 산출물. 실제 게임은 방향별 하위 폴더만 사용합니다.
+/assets/sprites/duck-player/*.png
+/assets/sprites/duck-player/*.gif
+/assets/sprites/duck-player/pipeline-meta.json
+/assets/sprites/duck-player/prompt-used.txt
+/assets/sprites/duck-player/references/2x2-anchor-guide-from-left.png
+/assets/sprites/duck-player/references/4x4-layout-guide.png
 
 # Reproducible local trailer intermediates and caches.
 /demo/.work/

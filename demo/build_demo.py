@@ -283,11 +283,13 @@ def draw_purpose_graphic(canvas: Image.Image, draw: ImageDraw.ImageDraw, scene_i
         draw.text((930, 175), "8.0", font=FONT_HUGE, fill=yellow, stroke_width=3, stroke_fill=(8, 19, 33))
         draw.text((982, 294), "SECONDS", font=FONT_SMALL, fill=(255, 255, 255))
     elif scene_id == "play":
-        for index, (key, label) in enumerate((("Z", "미끼"), ("X", "분신"))):
+        for index, (key, label) in enumerate((("Z", "미끼"), ("X", "분신 저장"))):
             x = 940 + index * 135
             rounded(draw, (x, 190, x + 100, 290), 18, (9, 19, 33, 235), yellow, 3)
             draw.text((x + 31, 203), key, font=font(42, True), fill=yellow)
-            draw.text((x + 23, 305), label, font=FONT_SMALL, fill=(255, 255, 255))
+            label_font = font(15 if index else 18, True)
+            label_box = draw.textbbox((0, 0), label, font=label_font)
+            draw.text((x + (100 - (label_box[2] - label_box[0])) / 2, 305), label, font=label_font, fill=(255, 255, 255))
     elif scene_id == "echo":
         colors = ((57, 189, 248), (182, 105, 255), (98, 247, 209))
         for index, color in enumerate(colors):
@@ -301,14 +303,25 @@ def draw_purpose_graphic(canvas: Image.Image, draw: ImageDraw.ImageDraw, scene_i
         draw.polygon((origin, (1215, 125), (1215, 365)), fill=red + (85,), outline=red)
         draw.ellipse((975, 215, 1035, 275), fill=(18, 31, 48), outline=(255, 255, 255), width=3)
         draw.text((990, 220), "!", font=font(32, True), fill=red)
-    elif scene_id == "stages":
-        draw.text((885, 190), "01", font=font(56, True), fill=cyan)
-        draw.text((982, 205), "→", font=font(42, True), fill=(255, 255, 255))
-        draw.text((1080, 190), "08", font=font(56, True), fill=yellow)
-        draw.line((900, 290, 1170, 290), fill=cyan, width=5)
+        draw.line((1005, 245, 1175, 245), fill=(255, 159, 67), width=5)
+        draw.polygon(((1175, 245), (1152, 233), (1152, 257)), fill=(255, 213, 100))
+    elif scene_id == "weapons":
+        left, right, ground = 900, 1190, 340
+        arrow_points = []
+        net_points = []
+        for index in range(31):
+            progress = index / 30
+            x = left + (right - left) * progress
+            arrow_points.append((x, ground - 58 * 4 * progress * (1 - progress)))
+            net_points.append((x, ground - 176 * 4 * progress * (1 - progress)))
+        draw.line(arrow_points, fill=(255, 159, 67), width=5)
+        draw.line(net_points, fill=(53, 207, 242), width=6)
+        draw.text((900, 185), "ARROW 520", font=font(20, True), fill=(255, 159, 67))
+        draw.text((900, 220), "NET 340", font=font(20, True), fill=(53, 207, 242))
+        draw.text((1105, 300), "높은 궤도", font=font(16, True), fill=(255, 255, 255))
     elif scene_id == "boss":
         rounded(draw, (900, 170, 1190, 325), 28, (65, 12, 38, 225), red, 4)
-        draw.text((943, 192), "BOSS", font=font(62, True), fill=red)
+        draw.text((920, 192), "CAPTAIN", font=font(48, True), fill=red)
         draw.text((953, 274), "FINAL LOOP", font=FONT_SMALL, fill=(255, 255, 255))
     elif scene_id == "score":
         draw.text((895, 175), "9,420", font=font(68, True), fill=yellow, stroke_width=2, stroke_fill=(8, 19, 33))
@@ -362,6 +375,57 @@ def load_capture(name: str) -> Image.Image:
         return blank
     CAPTURE_CACHE[name] = Image.open(path).convert("RGB")
     return CAPTURE_CACHE[name]
+
+
+def make_projectile_qa_capture() -> None:
+    """Render an honest QA card from the tested projectile profiles.
+
+    The preceding capture is the real in-game net-gun telegraph. This second
+    frame deliberately labels itself as a unit-test visualization so the
+    trailer never presents a synthetic arc as an in-game screenshot.
+    """
+    source = CAPTURES / "capture-07-stage5.png"
+    if source.exists():
+        canvas = Image.open(source).convert("RGB").resize((WIDTH, HEIGHT), Image.Resampling.LANCZOS)
+        canvas = canvas.filter(ImageFilter.GaussianBlur(2.2)).convert("RGBA")
+    else:
+        canvas = Image.new("RGBA", (WIDTH, HEIGHT), (10, 22, 39, 255))
+    tint = Image.new("RGBA", (WIDTH, HEIGHT), (5, 14, 27, 176))
+    canvas = Image.alpha_composite(canvas, tint)
+    draw = ImageDraw.Draw(canvas)
+
+    white = (248, 251, 255, 255)
+    cyan = (53, 207, 242, 255)
+    orange = (255, 159, 67, 255)
+    yellow = (255, 213, 100, 255)
+    muted = (185, 205, 225, 255)
+    rounded(draw, (58, 48, 1222, 652), 28, (8, 19, 34, 232), (98, 247, 209, 255), 3)
+    draw.text((90, 76), "PROJECTILE PHYSICS · UNIT TEST", font=font(18, True), fill=(98, 247, 209))
+    draw.text((90, 112), "화살과 그물, 서로 다른 회피 리듬", font=font(42, True), fill=white)
+    draw.text((92, 168), "실제 프로필 수치로 그린 궤도 검증 화면", font=font(22, False), fill=muted)
+
+    left, right, ground = 135, 1140, 520
+    draw.line((left, ground, right, ground), fill=(104, 130, 159), width=3)
+
+    def trajectory(apex: float) -> list[tuple[float, float]]:
+        return [
+            (left + (right - left) * p, ground - apex * 3.25 * 4 * p * (1 - p))
+            for p in (index / 80 for index in range(81))
+        ]
+
+    draw.line(trajectory(22), fill=orange, width=7)
+    draw.line(trajectory(68), fill=cyan, width=8)
+    draw.ellipse((left - 10, ground - 10, left + 10, ground + 10), fill=yellow)
+    draw.ellipse((right - 10, ground - 10, right + 10, ground + 10), fill=yellow)
+    draw.text((145, 548), "화살 · 520 px/s · 예고 0.50초 · 최고점 22", font=font(20, True), fill=orange)
+    draw.text((650, 548), "그물 · 340 px/s · 예고 0.65초 · 최고점 68", font=font(20, True), fill=cyan)
+    draw.text((145, 595), "PASS · 프레임 분할 독립", font=font(18, True), fill=white)
+    draw.text((420, 595), "PASS · 벽 스윕 충돌", font=font(18, True), fill=white)
+    draw.text((665, 595), "PASS · 원형 몸 판정", font=font(18, True), fill=white)
+    draw.text((925, 595), "PASS · 사거리 제한", font=font(18, True), fill=white)
+    draw.text((980, 250), "그물 높은 궤도", font=font(20, True), fill=cyan)
+    draw.text((520, 405), "화살 낮은 궤도", font=font(20, True), fill=orange)
+    canvas.convert("RGB").save(CAPTURES / "capture-08-stage6.png", optimize=True)
 
 
 def render_frame(scenes: list[dict], schedule: list[dict], spans: list[dict], total: float, time_value: float) -> Image.Image:
@@ -438,7 +502,7 @@ def encode_video(ffmpeg: Path, scenes: list[dict], schedule: list[dict], spans: 
         "-c:a", "aac", "-b:a", "96k", "-ar", "48000",
         "-movflags", "+faststart", "-shortest",
         "-metadata", "title=8초 도둑단 · OpenAI Game 2026 데모",
-        "-metadata", "comment=실제 게임 캡처, ElevenLabs 한국어 내레이션, 자체 생성 칩튠/SFX",
+        "-metadata", "comment=실제 게임 캡처, 한국어 내레이션, 자체 생성 칩튠/SFX",
         str(output),
     ]
     process = subprocess.Popen(command, stdin=subprocess.PIPE)
@@ -459,6 +523,7 @@ def encode_video(ffmpeg: Path, scenes: list[dict], schedule: list[dict], spans: 
 
 def main() -> None:
     WORK.mkdir(parents=True, exist_ok=True)
+    make_projectile_qa_capture()
     scenes = json.loads((HERE / "narration.json").read_text(encoding="utf-8"))
     schedule, spans, total, voice = build_timeline(scenes)
     if not (150 <= total <= 175):

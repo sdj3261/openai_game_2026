@@ -1,6 +1,8 @@
 param(
   [string]$Narration = "$PSScriptRoot\narration.json",
-  [string]$OutputDir = "$PSScriptRoot\.work\tts"
+  [string]$OutputDir = "$PSScriptRoot\.work\tts",
+  [string]$Only = "",
+  [int]$Rate = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,12 +21,18 @@ if (-not $voice) {
 }
 
 $speaker.SelectVoice($voice.Name)
-$speaker.Rate = 0
+$speaker.Rate = $Rate
 $speaker.Volume = 100
+$selected = @{}
+if ($Only) {
+  $Only.Split(",") | ForEach-Object { $selected[$_.Trim()] = $true }
+}
 
 for ($sceneIndex = 0; $sceneIndex -lt $scenes.Count; $sceneIndex++) {
   $scene = $scenes[$sceneIndex]
   for ($captionIndex = 0; $captionIndex -lt $scene.captions.Count; $captionIndex++) {
+    $stem = "{0:d2}-{1:d2}" -f $sceneIndex, $captionIndex
+    if ($selected.Count -gt 0 -and -not $selected.ContainsKey($stem)) { continue }
     $path = Join-Path $OutputDir ("{0:d2}-{1:d2}.wav" -f $sceneIndex, $captionIndex)
     $speaker.SetOutputToWaveFile($path)
     $speaker.Speak([string]$scene.captions[$captionIndex])
