@@ -6,13 +6,13 @@
     <meta name="theme-color" content="#72d9ff" />
     <meta name="description" content="8초 안에 열쇠를 찾아 잠긴 출구로 탈출하는 분신 협동 게임" />
     <title>8초 도둑단</title>
-    <link rel="icon" href="./favicon.ico?v=0.12.0" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/favicon-32.png?v=0.12.0" />
-    <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/favicon-16.png?v=0.12.0" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=0.12.0" />
-    <link rel="manifest" href="./site.webmanifest?v=0.12.0" />
-    <link rel="stylesheet" href="./design-system.css?v=0.12.0" />
-    <link rel="stylesheet" href="./styles.css?v=0.12.0" />
+    <link rel="icon" href="./favicon.ico?v=0.13.0" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/favicon-32.png?v=0.13.0" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/favicon-16.png?v=0.13.0" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=0.13.0" />
+    <link rel="manifest" href="./site.webmanifest?v=0.13.0" />
+    <link rel="stylesheet" href="./design-system.css?v=0.13.0" />
+    <link rel="stylesheet" href="./styles.css?v=0.13.0" />
   </head>
   <body>
     <a class="skip-link" href="#game">게임 화면으로 바로가기</a>
@@ -27,6 +27,7 @@
           <div class="hud-stat"><span id="loopLabel">차례</span><strong id="loopCount">1</strong></div>
           <div class="hud-stat"><span id="echoLabel">분신</span><strong id="echoCount">0</strong></div>
           <div class="hud-stat timer-stat"><span id="timeLabel">남은 시간</span><strong id="timer">8.0</strong></div>
+          <button class="game-menu-trigger" type="button" data-game-action="game-menu" aria-label="게임 메뉴" aria-controls="overlay" aria-expanded="false"><span aria-hidden="true">☰</span><small id="gameMenuActionLabel">메뉴</small></button>
         </div>
       </section>
 
@@ -62,12 +63,6 @@
           <button class="mobile-action mobile-action--echo" type="button" data-game-action="save" aria-keyshortcuts="X"><strong>X</strong><span id="cloneActionLabel">분신 만들기</span></button>
         </div>
 
-        <nav class="mobile-utility-actions" aria-label="추가 게임 조작">
-          <button class="utility-action" type="button" data-game-action="restart" aria-label="현재 차례 다시 하기" aria-keyshortcuts="R"><span aria-hidden="true">↺</span><small id="restartActionLabel">다시</small></button>
-          <button class="utility-action" type="button" data-game-action="undo" aria-label="마지막 분신 지우기"><span aria-hidden="true">↶</span><small id="undoActionLabel">분신 지우기</small></button>
-          <button class="utility-action" type="button" data-game-action="menu" aria-label="스테이지 선택"><span aria-hidden="true">☰</span><small id="mapActionLabel">맵</small></button>
-          <button class="utility-action utility-action--mute" type="button" data-game-action="mute" aria-label="사운드 켜기 또는 끄기" aria-keyshortcuts="M" aria-pressed="false"><span aria-hidden="true">♪</span><small id="muteActionLabel">소리</small></button>
-        </nav>
       </section>
 
       <footer class="controls" aria-label="키보드 조작 안내">
@@ -78,6 +73,6 @@
       </footer>
     </main>
 
-    <script type="module" src="./game.js?v=0.12.0"></script>
+    <script type="module" src="./game.js?v=0.13.0"></script>
   </body>
 </html>

@@ -6,11 +6,12 @@ import { LANGUAGES, resolveLanguage, t } from "./i18n.js";
 const CORE_KEYS = [
   "gameTitle", "gameTagline", "ruleRun", "ruleCopy", "ruleEscape", "play", "move", "noise",
   "clone", "profile", "records", "ranking", "settings", "language", "visualSound",
+  "gameMenuShort", "gameMenu", "gameMenuHint", "backToGame", "restartStage", "restartStageHelp", "stageMapHelp",
   "visualSoundHelp", "guide", "guideEight", "guideNoise", "guideClone", "guideDoor", "guideItems", "guideScore",
   "mute", "back", "save", "currentGoal", "nextStage", "difficulty", "best",
   "noRecord", "clear", "caught", "doorOpen", "guardHeard", "bossAlert", "gemGet", "exit",
   "stage", "now", "next", "score", "grade", "clearTime", "radarHits", "retries", "echoFull", "cloneUse", "noPenalty",
-  "saveWithX", "echoSaved", "needKey", "timeBonus", "timeBonusSound",
+  "saveWithX", "echoSaved", "needKey", "timeBonus", "timeBonusSound", "cloneTreasureGet", "caughtRestartHelp", "freshStart",
   "doorTutorial", "echoPlate", "doorLockedLabel", "doorOpenLabel",
   "arrowShot", "netShot", "arrowHit", "netHit",
 ];
@@ -48,6 +49,8 @@ test("all core keys have short translations in every supported language", () => 
   assert.equal(t("en", "doorOpenLabel", { value: 1 }), "Door 1 open");
   assert.equal(t("ja", "echoPlate", { value: 1 }), "スイッチ 1、ここでX");
   assert.equal(t("ko", "needKey"), "먼저 열쇠를 찾으세요!");
+  assert.match(t("ko", "cloneTreasureGet", { name: "태엽 열쇠", value: 300 }), /분신.*태엽 열쇠.*출구/);
+  assert.match(t("ko", "restartStageHelp"), /분신.*아이템.*처음부터/);
   assert.equal(t("ko", "guideScore", { value: 2 }), "이 스테이지에는 분신 2개가 필요해요. 최대 10개이며 더 쓰면 점수가 깎여요.");
   assert.equal(t("en", "gem"), "KEY");
   assert.equal(t("ja", "escapeNow"), "出口オープン");

@@ -65,3 +65,14 @@ export function canCreateClone(count) {
   const numeric = Number(count);
   return Number.isFinite(numeric) && numeric >= 0 && Math.floor(numeric) < MAX_CLONES;
 }
+
+export function canCollectTeamKey(status = {}) {
+  const candidate = status && typeof status === "object" ? status : {};
+  const distance = Number(candidate.distance);
+  const pickupRadius = Number(candidate.pickupRadius ?? 29);
+  return candidate.alreadyCollected !== true
+    && Number.isFinite(distance)
+    && Number.isFinite(pickupRadius)
+    && pickupRadius > 0
+    && distance < pickupRadius;
+}

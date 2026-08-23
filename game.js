@@ -1,4 +1,4 @@
-import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.12.0";
+import { describeAnalogStick, projectAnalogStick } from "./input-utils.js?v=0.13.0";
 import {
   DEFAULT_PROFILE,
   LEGACY_DEFAULT_PROFILE_NAME,
@@ -13,18 +13,19 @@ import {
   normalizeProfileName,
   prepareStoredProfile,
   serializeStoredProfile,
-} from "./profile-utils.js?v=0.12.0";
-import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.12.0";
+} from "./profile-utils.js?v=0.13.0";
+import { LANGUAGES, resolveLanguage, t } from "./i18n.js?v=0.13.0";
 import {
   MAX_CLONES,
+  canCollectTeamKey,
   canCreateClone,
   canEscape,
   stageNineBlackoutOpacity,
   stageNineEventShakeIntensity,
   stageNineShakeOffset,
-} from "./game-rules.js?v=0.12.0";
-import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.12.0";
-import { placeCanvasLabel, rectFullyInsideBounds } from "./label-layout.js?v=0.12.0";
+} from "./game-rules.js?v=0.13.0";
+import { duckSpriteFor, guardSpriteFor, imageReady } from "./sprite-assets.js?v=0.13.0";
+import { placeCanvasLabel, rectFullyInsideBounds } from "./label-layout.js?v=0.13.0";
 import {
   PROJECTILE_PROFILES,
   createProjectileLaunch,
@@ -32,7 +33,7 @@ import {
   projectileElapsedMs,
   projectileFlightPosition,
   shouldRemoveProjectile,
-} from "./projectile-utils.js?v=0.12.0";
+} from "./projectile-utils.js?v=0.13.0";
 
 const canvas = document.querySelector("#game");
 const ctx = canvas.getContext("2d");
@@ -51,10 +52,8 @@ const ui = {
   alertLabel: document.querySelector("#alertLabel"),
   noiseActionLabel: document.querySelector("#noiseActionLabel"),
   cloneActionLabel: document.querySelector("#cloneActionLabel"),
-  restartActionLabel: document.querySelector("#restartActionLabel"),
-  undoActionLabel: document.querySelector("#undoActionLabel"),
-  mapActionLabel: document.querySelector("#mapActionLabel"),
-  muteActionLabel: document.querySelector("#muteActionLabel"),
+  gameMenuActionLabel: document.querySelector("#gameMenuActionLabel"),
+  gameMenuTrigger: document.querySelector('[data-game-action="game-menu"]'),
   desktopMoveLabel: document.querySelector("#desktopMoveLabel"),
   desktopClickLabel: document.querySelector("#desktopClickLabel"),
   desktopNoiseLabel: document.querySelector("#desktopNoiseLabel"),
@@ -481,7 +480,6 @@ let projectiles = [];
 let rewindAmount = 0;
 let shake = 0;
 let flash = 0;
-let caughtTimer = 0;
 let currentSecond = -1;
 let currentMusicStep = -1;
 let toastTimer = null;
@@ -491,6 +489,7 @@ let loopLimit = LOOP_DURATION;
 let timeBonusCollected = false;
 let keyCollected = false;
 let keyValueCollected = 0;
+let keyCarrierId = null;
 let collectedItemIds = new Set();
 let itemBonusScore = 0;
 let radarShieldCharges = 0;
@@ -499,13 +498,18 @@ let runRadarHits = 0;
 let runRetries = 0;
 let wasSeenByAnyGuard = false;
 let doorTutorialShown = false;
+let gameMenuReturnState = null;
 let unlocked = Math.max(1, Math.min(levels.length, Number(localStorage.getItem("loopHeistUnlocked")) || 1));
 let completed = Math.max(0, Math.min(levels.length, Number(localStorage.getItem("loopHeistCompleted")) || 0));
 unlocked = Math.max(unlocked, Math.min(levels.length, completed + 1));
-// Local-only stage selector for repeatable screenshots and play QA. It never unlocks the public build.
-const localQaStage = ["127.0.0.1", "localhost"].includes(location.hostname)
+// Local-only commands support repeatable browser QA and are never enabled on the public build.
+const isLocalQaHost = ["127.0.0.1", "localhost"].includes(location.hostname);
+const localQaStage = isLocalQaHost
   ? Number(new URLSearchParams(location.search).get("qaStage"))
   : 0;
+let pendingLocalQaCommand = isLocalQaHost
+  ? new URLSearchParams(location.search).get("qaCommand") || ""
+  : "";
 let moveTarget = null;
 let moveTargetStuckFor = 0;
 let lastAlertValue = -1;
@@ -719,10 +723,7 @@ function updateStaticTranslations() {
   ui.noiseActionLabel.textContent = t(settings.language, "noise");
   ui.cloneActionLabel.textContent = t(settings.language, "clone");
   ui.alertLabel.textContent = t(settings.language, "alert");
-  ui.restartActionLabel.textContent = t(settings.language, "restart");
-  ui.undoActionLabel.textContent = t(settings.language, "undo");
-  ui.mapActionLabel.textContent = t(settings.language, "stageMap");
-  ui.muteActionLabel.textContent = muted ? t(settings.language, "on") : t(settings.language, "sound");
+  ui.gameMenuActionLabel.textContent = t(settings.language, "gameMenuShort");
   ui.desktopMoveLabel.textContent = t(settings.language, "move");
   ui.desktopClickLabel.textContent = t(settings.language, "clickMove");
   ui.desktopNoiseLabel.textContent = t(settings.language, "noise");
@@ -739,11 +740,7 @@ function updateStaticTranslations() {
   document.querySelector("#gameHelp").textContent = t(settings.language, "gameHelp");
   ui.alertMeter?.setAttribute("aria-label", t(settings.language, "alertRisk"));
   document.querySelector(".mobile-gamepad")?.setAttribute("aria-label", t(settings.language, "mobileControls"));
-  document.querySelector(".mobile-utility-actions")?.setAttribute("aria-label", t(settings.language, "moreControls"));
-  document.querySelector('[data-game-action="restart"]')?.setAttribute("aria-label", t(settings.language, "restartLoop"));
-  document.querySelector('[data-game-action="undo"]')?.setAttribute("aria-label", t(settings.language, "undoLastEcho"));
-  document.querySelector('[data-game-action="menu"]')?.setAttribute("aria-label", t(settings.language, "stageMap"));
-  document.querySelector('[data-game-action="mute"]')?.setAttribute("aria-label", t(settings.language, "soundToggle"));
+  ui.gameMenuTrigger?.setAttribute("aria-label", t(settings.language, "gameMenu"));
   document.querySelector(".controls")?.setAttribute("aria-label", t(settings.language, "keyboardHelp"));
 }
 
@@ -834,6 +831,80 @@ function showSettingsOverlay() {
   document.querySelector("#closeSettings").addEventListener("click", () => showMenu(levelIndex));
 }
 
+function setGameMenuExpanded(expanded) {
+  ui.gameMenuTrigger?.setAttribute("aria-expanded", String(expanded));
+}
+
+function resumeGameFromMenu() {
+  if (state !== "paused" || !gameMenuReturnState) return;
+  state = gameMenuReturnState;
+  gameMenuReturnState = null;
+  setGameMenuExpanded(false);
+  hideOverlay();
+  updateHud();
+  announce(t(settings.language, "gameResumed"));
+}
+
+function updateGameMenuSoundButton() {
+  const button = document.querySelector("#gameSoundAction");
+  if (!button) return;
+  button.setAttribute("aria-pressed", String(!muted));
+  button.querySelector("small").textContent = t(settings.language, muted ? "off" : "on");
+}
+
+function showGameMenu() {
+  if (state === "paused") {
+    resumeGameFromMenu();
+    return;
+  }
+  if (!["playing", "countdown", "awaiting-save"].includes(state)) return;
+  gameMenuReturnState = state;
+  state = "paused";
+  keys.clear();
+  resetStickInput();
+  moveTarget = null;
+  setOverlay(`
+    <section class="panel toy-dialog game-menu-dialog" aria-labelledby="overlayTitle">
+      <button class="dialog-close" id="resumeGameAction" type="button" aria-label="${t(settings.language, "backToGame")}">×</button>
+      <h2 id="overlayTitle" data-dialog-title tabindex="-1">${t(settings.language, "gameMenu")}</h2>
+      <p class="game-menu-dialog__hint">${t(settings.language, "gameMenuHint")}</p>
+      <div class="game-menu-options" aria-label="${t(settings.language, "gameMenu")}">
+        <button class="game-menu-option game-menu-option--restart" id="restartStageAction" type="button"><span aria-hidden="true">↺</span><b>${t(settings.language, "restartStage")}</b><small>${t(settings.language, "restartStageHelp")}</small></button>
+        <button class="game-menu-option" id="stageSelectAction" type="button"><span aria-hidden="true">▦</span><b>${t(settings.language, "stageMap")}</b><small>${t(settings.language, "stageMapHelp")}</small></button>
+        <button class="game-menu-option" id="gameSoundAction" type="button" aria-pressed="${String(!muted)}"><span aria-hidden="true">♪</span><b>${t(settings.language, "sound")}</b><small>${t(settings.language, muted ? "off" : "on")}</small></button>
+      </div>
+    </section>
+  `, "game-menu");
+  setGameMenuExpanded(true);
+  updateHud();
+  document.querySelector("#resumeGameAction").addEventListener("click", resumeGameFromMenu);
+  document.querySelector("#restartStageAction").addEventListener("click", restartStage);
+  document.querySelector("#stageSelectAction").addEventListener("click", () => {
+    gameMenuReturnState = null;
+    setGameMenuExpanded(false);
+    showMenu(levelIndex);
+  });
+  document.querySelector("#gameSoundAction").addEventListener("click", () => {
+    toggleMute();
+    updateGameMenuSoundButton();
+  });
+  announce(t(settings.language, "gamePaused"));
+}
+
+function showCaughtOverlay(reasonKey) {
+  const reason = t(settings.language, reasonKey);
+  setOverlay(`
+    <section class="panel caught-dialog" aria-labelledby="overlayTitle">
+      <span class="caught-dialog__mark" aria-hidden="true">!</span>
+      <h2 id="overlayTitle" data-dialog-title tabindex="-1">${escapeHtml(reason)}</h2>
+      <p>${t(settings.language, "caughtRestartHelp")}</p>
+      <button class="toy-button caught-dialog__restart" id="caughtRestartAction" type="button">${t(settings.language, "restartStage")}</button>
+    </section>
+  `, "caught");
+  document.querySelector("#caughtRestartAction").addEventListener("click", restartStage);
+  announce(`${reason} ${t(settings.language, "caughtRestartHelp")}`);
+}
+
 function showRecordsOverlay(selectedIndex = levelIndex) {
   state = "menu";
   selectedIndex = clamp(selectedIndex, 0, Math.max(0, unlocked - 1));
@@ -876,6 +947,8 @@ function showRecordsOverlay(selectedIndex = levelIndex) {
 
 function showMenu(selectedIndex = null) {
   const previousState = state;
+  gameMenuReturnState = null;
+  setGameMenuExpanded(false);
   state = "menu";
   clearTimeout(toastTimer);
   ui.toast.classList.remove("show");
@@ -920,9 +993,9 @@ function showMenu(selectedIndex = null) {
       <div class="arcade-stage-card toy-stage-card" data-stage="${level.code}" data-theme="${level.theme.id}">
         <div class="arcade-stage-info">
           <div class="stage-heading">
-            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.12.0" alt="" aria-hidden="true"></span>
+            <span class="stage-mascot"><img src="assets/sprites/duck-player/down/${stillHero}?v=0.13.0" alt="" aria-hidden="true"></span>
             <div class="stage-heading__copy"><span class="arcade-rule">${t(settings.language, "stage")} ${Number(level.code)} / ${levels.length}</span><h2 class="stage-title"><span class="stage-title__local">${escapeHtml(stageCopy.title)}</span></h2><p class="stage-summary">${escapeHtml(stageCopy.rule)}</p></div>
-            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.12.0" alt="" aria-hidden="true"></span>` : ""}
+            ${levelIndex === levels.length - 1 ? `<span class="stage-boss-preview"><img src="assets/sprites/toy-guards/captain/${stillBoss}?v=0.13.0" alt="" aria-hidden="true"></span>` : ""}
           </div>
           <div class="stage-mission"><span>${t(settings.language, "currentGoal")}</span><b>${escapeHtml(stageCopy.cue)}</b></div>
           <div class="arcade-stats"><span>${t(settings.language, "difficulty")} ${level.difficulty}/${levels.length}</span><span>${t(settings.language, "best")} ${best ? formatRecordScore(best) : "--"}</span></div>
@@ -988,8 +1061,10 @@ function createGuards() {
   });
 }
 
-function startLevel(index = levelIndex) {
+function startLevel(index = levelIndex, options = {}) {
   initAudio();
+  gameMenuReturnState = null;
+  setGameMenuExpanded(false);
   levelIndex = index;
   level = levels[index];
   const stageCopy = localizedStage(level);
@@ -1001,18 +1076,21 @@ function startLevel(index = levelIndex) {
   timeBonusCollected = false;
   keyCollected = false;
   keyValueCollected = 0;
+  keyCarrierId = null;
   collectedItemIds = new Set();
   itemBonusScore = 0;
   radarShieldCharges = 0;
   radarShieldBlocking = false;
   runRadarHits = 0;
-  runRetries = 0;
+  runRetries = Math.max(0, Number(options.retryPenalty) || 0);
   wasSeenByAnyGuard = false;
   doorTutorialShown = false;
   stageStartedAt = 0;
   lastClearResult = null;
-  gameStats.plays += 1;
-  saveStats();
+  if (options.countPlay !== false) {
+    gameStats.plays += 1;
+    saveStats();
+  }
   resetLoop(false);
   countdownRemaining = 1000;
   countdownCue = -1;
@@ -1027,10 +1105,11 @@ function startLevel(index = levelIndex) {
 
 function resetLoop(withEffect = true, preserveStick = false) {
   loopLimit = stageLoopLimit();
-  // The key belongs to the current 8-second attempt. Rewinding starts a new
-  // attempt, so the player must pick it up and reach the exit in one run.
+  // The key belongs to the current 8-second attempt. The current duck or a
+  // replaying clone can collect it for the team, but rewinding clears it.
   keyCollected = false;
   keyValueCollected = 0;
+  keyCarrierId = null;
   player = {
     id: "current",
     x: level.start.x,
@@ -1062,6 +1141,7 @@ function resetLoop(withEffect = true, preserveStick = false) {
     echo.x = level.start.x;
     echo.y = level.start.y;
     echo.angle = -Math.PI / 2;
+    echo.hasKey = false;
   });
   if (withEffect) {
     rewindAmount = reducedMotionQuery.matches ? 0 : 1;
@@ -1096,6 +1176,7 @@ function saveAndRewind() {
     radius: PLAYER_RADIUS,
     eventIndex: 0,
     colorIndex: echoes.length,
+    hasKey: false,
   });
   gameStats.echoes += 1;
   saveStats();
@@ -1105,45 +1186,12 @@ function saveAndRewind() {
   showToast(t(settings.language, "echoSaved", { value: echoes.length }), 1100);
 }
 
-function restartCurrentLoop() {
-  if (state !== "playing" && state !== "awaiting-save") return;
-  runRetries += 1;
-  loopNumber += 1;
-  state = "playing";
-  resetLoop(true);
-  showToast(t(settings.language, "retry"), 700);
-}
-
-function restartWholeLevel() {
-  if (state !== "playing" && state !== "caught" && state !== "awaiting-save") return;
-  echoes = [];
-  loopNumber = 1;
-  loopLimit = LOOP_DURATION;
-  timeBonusCollected = false;
-  keyCollected = false;
-  keyValueCollected = 0;
-  collectedItemIds = new Set();
-  itemBonusScore = 0;
-  radarShieldCharges = 0;
-  radarShieldBlocking = false;
-  runRadarHits = 0;
-  runRetries = 0;
-  wasSeenByAnyGuard = false;
-  doorTutorialShown = false;
-  resetLoop(true);
-  state = "playing";
-  showToast(t(settings.language, "reset"), 700);
-}
-
-function undoLastEcho() {
-  if (state !== "playing" || echoes.length === 0) {
-    showToast(t(settings.language, "noEcho"), 700);
-    return;
-  }
-  echoes.pop();
-  loopNumber = echoes.length + 1;
-  resetLoop(true);
-  showToast(t(settings.language, "echoRemoved"), 800);
+function restartStage() {
+  if (!["playing", "countdown", "paused", "caught", "awaiting-save"].includes(state)) return;
+  const retryPenalty = runRetries + (state === "caught" ? 0 : 1);
+  gameMenuReturnState = null;
+  startLevel(levelIndex, { retryPenalty, countPlay: false });
+  showToast(t(settings.language, "freshStart"), 900);
 }
 
 function recordCurrentPose(time = loopElapsed) {
@@ -1194,6 +1242,7 @@ function updateEchoes() {
     echo.x = pose.x;
     echo.y = pose.y;
     echo.angle = pose.angle;
+    collectTeamKey(echo);
     const events = echo.recording.events;
     while (echo.eventIndex < events.length && events[echo.eventIndex].t <= loopElapsed) {
       const event = events[echo.eventIndex++];
@@ -1292,6 +1341,22 @@ function collectStageItem(item) {
   showSoundCaption("itemSound", item);
 }
 
+function collectTeamKey(actor) {
+  if (!actor || !canCollectTeamKey({ alreadyCollected: keyCollected, distance: dist(actor, level.key) })) return false;
+  keyCollected = true;
+  keyValueCollected = level.keyType?.value || 0;
+  keyCarrierId = actor.id;
+  actor.hasKey = true;
+  sound("gem");
+  flash = reducedMotionQuery.matches ? 0 : 0.7;
+  burst(level.key.x, level.key.y, level.keyType?.palette?.accent || "#ffd166", 26, 150);
+  const keyName = t(settings.language, level.keyType?.nameKey || "gem");
+  const messageKey = actor === player ? "treasureGet" : "cloneTreasureGet";
+  showToast(t(settings.language, messageKey, { name: keyName, value: keyValueCollected.toLocaleString(settings.language) }), 1400);
+  showSoundCaption("gemGet", level.key);
+  return true;
+}
+
 function updatePlayer(dt) {
   let dx = 0;
   let dy = 0;
@@ -1350,19 +1415,9 @@ function updatePlayer(dt) {
     if (!collectedItemIds.has(item.id) && dist(player, item) < 28) collectStageItem(item);
   }
 
-  if (!keyCollected && dist(player, level.key) < 29) {
-    keyCollected = true;
-    keyValueCollected = level.keyType?.value || 0;
-    player.hasKey = true;
-    sound("gem");
-    flash = reducedMotionQuery.matches ? 0 : 0.7;
-    burst(level.key.x, level.key.y, level.keyType?.palette?.accent || "#ffd166", 26, 150);
-    const keyName = t(settings.language, level.keyType?.nameKey || "gem");
-    showToast(t(settings.language, "treasureGet", { name: keyName, value: keyValueCollected.toLocaleString(settings.language) }), 1400);
-    showSoundCaption("gemGet", level.key);
-  }
+  collectTeamKey(player);
   if (dist(player, level.exit) < 38) {
-    if (canEscape({ hasKey: player.hasKey })) completeLevel();
+    if (canEscape({ hasKey: keyCollected })) completeLevel();
     else if (!player.exitHintShown) {
       player.exitHintShown = true;
       showToast(t(settings.language, "needKey"), 1100);
@@ -1771,16 +1826,20 @@ function updateGuards(dt) {
 
 function catchPlayer(reasonKey = "caught") {
   if (state !== "playing") return;
+  recordCurrentPose();
   state = "caught";
-  caughtTimer = 0.8;
+  keys.clear();
+  resetStickInput();
+  moveTarget = null;
   shake = reducedMotionQuery.matches ? 0 : 14;
   flash = reducedMotionQuery.matches ? 0 : 1;
   gameStats.catches += 1;
   runRetries += 1;
   saveStats();
   sound("caught");
-  showToast(t(settings.language, reasonKey), 800);
   showSoundCaption(reasonKey, player);
+  showCaughtOverlay(reasonKey);
+  updateHud();
 }
 
 function completeLevel() {
@@ -1950,8 +2009,68 @@ function updateEffects(dt) {
   if (soundCaptionRemaining === 0) ui.soundCaption?.classList.remove("show");
 }
 
+function applyLocalQaCommand() {
+  if (!isLocalQaHost) return;
+  const command = pendingLocalQaCommand || canvas.dataset.qaCommand;
+  if (!command) return;
+  if (state !== "playing") return;
+  pendingLocalQaCommand = "";
+  delete canvas.dataset.qaCommand;
+  if (command === "force-caught") {
+    catchPlayer();
+    return;
+  }
+  if (command === "seed-key-clone" && state === "playing") {
+    echoes = [{
+      id: "qa-key-clone",
+      recording: {
+        frames: [
+          { t: 0, x: level.key.x, y: level.key.y, angle: 0 },
+          { t: loopLimit, x: level.key.x, y: level.key.y, angle: 0 },
+        ],
+        events: [],
+      },
+      x: level.start.x,
+      y: level.start.y,
+      angle: 0,
+      radius: PLAYER_RADIUS,
+      eventIndex: 0,
+      colorIndex: 0,
+      hasKey: false,
+    }];
+    loopNumber = 2;
+    resetLoop(false);
+    state = "playing";
+    updateHud();
+    return;
+  }
+  if (command === "seed-restart-state" && state === "playing") {
+    const item = level.items?.[0];
+    echoes = [{
+      id: "qa-restart-clone",
+      recording: makeRecord(),
+      x: level.start.x,
+      y: level.start.y,
+      angle: 0,
+      radius: PLAYER_RADIUS,
+      eventIndex: 0,
+      colorIndex: 0,
+      hasKey: false,
+    }];
+    if (item) collectedItemIds.add(item.id);
+    itemBonusScore = 777;
+    radarShieldCharges = 1;
+    keyCollected = true;
+    keyValueCollected = level.keyType?.value || 0;
+    keyCarrierId = player.id;
+    player.hasKey = true;
+    updateHud();
+  }
+}
+
 function update(dt, now) {
   updateEffects(dt);
+  applyLocalQaCommand();
   if (state === "countdown") {
     countdownRemaining -= dt * 1000;
     const cue = countdownRemaining > 500 ? 1 : 0;
@@ -1971,12 +2090,6 @@ function update(dt, now) {
     return;
   }
   if (state === "caught") {
-    caughtTimer -= dt;
-    if (caughtTimer <= 0) {
-      state = "playing";
-      loopNumber += 1;
-      resetLoop(true);
-    }
     updateHud();
     return;
   }
@@ -2017,7 +2130,9 @@ function update(dt, now) {
     recordCurrentPose(loopLimit);
     keyCollected = false;
     keyValueCollected = 0;
+    keyCarrierId = null;
     player.hasKey = false;
+    echoes.forEach((echo) => { echo.hasKey = false; });
     state = "awaiting-save";
     resetStickInput();
     moveTarget = null;
@@ -2042,16 +2157,12 @@ function updateHud() {
   }
   ui.touchActions.forEach((button) => {
     const action = button.dataset.gameAction;
-    if (!['menu', 'mute'].includes(action)) {
+    if (action === "game-menu") {
+      button.disabled = !["playing", "countdown", "awaiting-save", "paused"].includes(state);
+      button.setAttribute("aria-expanded", String(state === "paused"));
+    } else {
       const canSaveFrozenLoop = action === "save" && state === "awaiting-save";
-      const canRestartFrozenLoop = action === "restart" && state === "awaiting-save";
-      const hasPlayableState = state === "playing" || canSaveFrozenLoop || canRestartFrozenLoop;
-      button.disabled = !hasPlayableState || (action === "undo" && echoes.length === 0);
-    }
-    if (action === "mute") {
-      button.setAttribute("aria-pressed", String(muted));
-      const label = button.querySelector("small, span:last-child");
-      if (label) label.textContent = muted ? t(settings.language, "on") : t(settings.language, "sound");
+      button.disabled = state !== "playing" && !canSaveFrozenLoop;
     }
   });
   canvas.dataset.debug = JSON.stringify({
@@ -2062,14 +2173,16 @@ function updateHud() {
     loopLimit,
     scoreRun: { radarHits: runRadarHits, retries: runRetries },
     timeBonusCollected,
-    key: { collected: keyCollected, value: keyValueCollected, nameKey: level.keyType?.nameKey },
+    key: { collected: keyCollected, carrierId: keyCarrierId, value: keyValueCollected, nameKey: level.keyType?.nameKey },
     items: { collected: [...collectedItemIds], bonus: itemBonusScore, shieldCharges: radarShieldCharges },
-    player: player ? { x: Math.round(player.x), y: Math.round(player.y), hasKey: player.hasKey, exposure: Number(player.exposure.toFixed(2)) } : null,
+    player: player ? { id: player.id, x: Math.round(player.x), y: Math.round(player.y), hasKey: player.hasKey, exposure: Number(player.exposure.toFixed(2)) } : null,
     echoes: echoes.map((echo) => {
       const savedEnd = echo.recording.frames[echo.recording.frames.length - 1];
       return {
+        id: echo.id,
         x: Math.round(echo.x),
         y: Math.round(echo.y),
+        hasKey: echo.hasKey,
         savedEnd: savedEnd ? { t: Math.round(savedEnd.t), x: Math.round(savedEnd.x), y: Math.round(savedEnd.y) } : null,
       };
     }),
@@ -2608,7 +2721,7 @@ function drawKey(now) {
 }
 
 function drawExit(now) {
-  const active = player?.hasKey;
+  const active = keyCollected;
   const phase = Math.floor(now / 140) % 4;
   ctx.save();
   ctx.translate(Math.round(level.exit.x), Math.round(level.exit.y));
@@ -2774,7 +2887,7 @@ function drawProjectiles() {
 }
 
 function drawHeldKey(actor, spriteSize = 48) {
-  if (actor !== player || !player.hasKey) return;
+  if (!actor?.hasKey) return;
   ctx.save();
   ctx.translate(Math.round(actor.x), Math.round(actor.y - spriteSize * 0.58));
   ctx.fillStyle = ACTOR_COLORS.outline;
@@ -2826,7 +2939,7 @@ function drawDuckAgentSprite(actor, isEcho, index) {
     ctx.fillText(String(index + 1), x, badgeY + 1);
   }
   ctx.restore();
-  if (!isEcho) drawHeldKey(actor, size);
+  drawHeldKey(actor, size);
   return true;
 }
 
@@ -2902,7 +3015,7 @@ function drawAgent(actor, isEcho = false, index = 0) {
   }
   ctx.restore();
 
-  if (!isEcho) drawHeldKey(actor, unit * 22);
+  drawHeldKey(actor, unit * 22);
 }
 
 function drawEchoTrail(echo, index) {
@@ -3373,28 +3486,33 @@ function runGameAction(action) {
   initAudio();
   if (action === "noise") triggerNoise();
   else if (action === "save") saveAndRewind();
-  else if (action === "restart") restartCurrentLoop();
-  else if (action === "undo") undoLastEcho();
-  else if (action === "reset") restartWholeLevel();
-  else if (action === "menu") showMenu();
-  else if (action === "mute") toggleMute();
+  else if (action === "game-menu") showGameMenu();
 }
 
 window.addEventListener("keydown", (event) => {
   const interactive = event.target instanceof Element && event.target.closest("button, a, input, select, textarea, [contenteditable='true']");
-  if (event.code === "Escape" && ["playing", "countdown", "complete", "caught", "awaiting-save"].includes(state)) {
+  if (event.code === "Escape" && state === "paused") {
     event.preventDefault();
-    showMenu();
+    resumeGameFromMenu();
+    return;
+  }
+  if (event.code === "Escape" && ["playing", "countdown", "awaiting-save"].includes(state)) {
+    event.preventDefault();
+    showGameMenu();
+    return;
+  }
+  if (state === "caught") {
+    if (!event.repeat && event.code === "KeyR") restartStage();
     return;
   }
   if (state === "awaiting-save") {
     if (interactive && ["Space", "Enter"].includes(event.code)) return;
     if (event.repeat && ["KeyX", "KeyR", "Backspace", "KeyM"].includes(event.code)) return;
     if (event.code === "KeyX") saveAndRewind();
-    if (event.code === "KeyR") restartCurrentLoop();
+    if (event.code === "KeyR") restartStage();
     if (event.code === "Backspace") {
       event.preventDefault();
-      restartWholeLevel();
+      restartStage();
     }
     if (event.code === "KeyM") toggleMute();
     return;
@@ -3408,14 +3526,13 @@ window.addEventListener("keydown", (event) => {
     keys.add(event.code);
     if (event.code.startsWith("Arrow")) event.preventDefault();
   }
-  if (event.repeat && ["KeyZ", "KeyX", "KeyR", "KeyU", "Backspace", "KeyM"].includes(event.code)) return;
+  if (event.repeat && ["KeyZ", "KeyX", "KeyR", "Backspace", "KeyM"].includes(event.code)) return;
   if (event.code === "KeyZ") triggerNoise();
   if (event.code === "KeyX") saveAndRewind();
-  if (event.code === "KeyR") restartCurrentLoop();
-  if (event.code === "KeyU") undoLastEcho();
+  if (event.code === "KeyR") restartStage();
   if (event.code === "Backspace") {
     event.preventDefault();
-    restartWholeLevel();
+    restartStage();
   }
   if (event.code === "KeyM") toggleMute();
 });
@@ -3469,6 +3586,10 @@ ui.overlay.addEventListener("keydown", (event) => {
   }
 });
 
+ui.overlay.addEventListener("pointerdown", (event) => {
+  if (event.target === ui.overlay && ui.overlay.dataset.view === "game-menu") resumeGameFromMenu();
+});
+
 if ("ResizeObserver" in window) {
   new ResizeObserver(() => { canvasSizeDirty = true; }).observe(canvas);
 }
@@ -3485,12 +3606,12 @@ window.__LOOP_HEIST_DEBUG__ = {
     loopLimit,
     scoreRun: { radarHits: runRadarHits, retries: runRetries },
     timeBonusCollected,
-    key: { collected: keyCollected, value: keyValueCollected, nameKey: level.keyType?.nameKey },
+    key: { collected: keyCollected, carrierId: keyCarrierId, value: keyValueCollected, nameKey: level.keyType?.nameKey },
     items: { collected: [...collectedItemIds], bonus: itemBonusScore, shieldCharges: radarShieldCharges },
     player: player ? { x: player.x, y: player.y, hasKey: player.hasKey, exposure: player.exposure } : null,
     echoes: echoes.map((echo) => {
       const savedEnd = echo.recording.frames[echo.recording.frames.length - 1];
-      return { x: echo.x, y: echo.y, savedEnd: savedEnd ? { ...savedEnd } : null };
+      return { id: echo.id, x: echo.x, y: echo.y, hasKey: echo.hasKey, savedEnd: savedEnd ? { ...savedEnd } : null };
     }),
     plates: Object.fromEntries(plateStates),
     doors: [...doorStates],

@@ -22,6 +22,9 @@ body.dialog-open .mobile-gamepad {
   pointer-events: none;
 }
 
+body.dialog-open .topbar::before,
+body.dialog-open .topbar::after { display: none !important; }
+
 button {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -3018,4 +3021,146 @@ kbd {
     gap: 4px 14px;
     white-space: nowrap;
   }
+}
+
+/* One compact entry point keeps play controls separate from secondary actions. */
+.game-menu-trigger {
+  min-width: 58px;
+  min-height: 46px;
+  padding: 3px 7px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  color: var(--toy-ink);
+  border: 2px solid var(--toy-line);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 3px 0 rgb(38 54 95 / 0.26);
+}
+
+.game-menu-trigger > span { font-size: 1rem; font-weight: 900; line-height: 1; }
+.game-menu-trigger small { color: var(--text-secondary); font-size: 0.56rem; font-weight: 900; }
+.game-menu-trigger[aria-expanded="true"] { color: #704500; background: var(--toy-gold); }
+.game-menu-trigger:disabled { opacity: 0.38; }
+
+.game-menu-dialog {
+  position: relative;
+  width: min(480px, 100%);
+  padding-top: clamp(24px, 5vw, 34px);
+}
+
+.game-menu-dialog h2 { margin-bottom: 4px; text-align: center; }
+.game-menu-dialog__hint { margin: 0 42px 14px; color: var(--text-secondary); font-size: 0.72rem; font-weight: 800; text-align: center; }
+
+.dialog-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  color: var(--toy-ink);
+  border: 2px solid var(--toy-line);
+  border-radius: 50%;
+  background: #ffffff;
+  font: 900 1.35rem/1 var(--font-ui);
+  box-shadow: 0 3px 0 rgb(38 54 95 / 0.24);
+}
+
+.game-menu-options { display: grid; gap: 8px; }
+.game-menu-option {
+  min-height: 64px;
+  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 9px;
+  color: var(--toy-ink);
+  border: 2px solid var(--toy-line);
+  border-radius: 12px;
+  background: #ffffff;
+  text-align: left;
+  box-shadow: 0 3px 0 rgb(38 54 95 / 0.2);
+}
+.game-menu-option > span { grid-row: 1 / 3; font-size: 1.35rem; font-weight: 900; text-align: center; }
+.game-menu-option b { font-size: 0.9rem; }
+.game-menu-option small { color: var(--text-secondary); font-size: 0.66rem; font-weight: 800; }
+.game-menu-option--restart { border-color: #df6b67; background: #fff1ef; }
+
+.overlay[data-view="caught"] {
+  place-items: center;
+  background: rgb(74 8 22 / 0.88);
+}
+.overlay[data-view="caught"]::before,
+.overlay[data-view="caught"]::after { display: none; }
+
+.caught-dialog {
+  width: min(440px, 100%);
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  color: #5d0f1e;
+  border-color: #a9223b;
+  background: #fff5f3;
+  box-shadow: 0 9px 0 #621126;
+  text-align: center;
+}
+.caught-dialog__mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  border: 4px solid #7f152c;
+  border-radius: 50%;
+  background: #e83f4f;
+  font: 900 2rem/1 var(--font-display-en);
+}
+.caught-dialog h2 { margin: 0; color: #a41530; font-size: clamp(1.8rem, 8vw, 2.8rem); }
+.caught-dialog p { margin: 0; font-size: 0.8rem; font-weight: 900; }
+.caught-dialog__restart {
+  width: 100%;
+  min-height: 58px;
+  margin-top: 4px;
+  color: #ffffff;
+  border-color: #6f1025;
+  background: #dc3348;
+}
+
+@media (max-width: 900px), (pointer: coarse) {
+  .mobile-gamepad { grid-template-rows: minmax(120px, 1fr); }
+  .virtual-stick { grid-row: 1; }
+  .mobile-primary-actions { grid-row: 1; }
+}
+
+@media (orientation: portrait) and (max-width: 600px) {
+  .game-menu-trigger { min-width: 42px; min-height: 42px; padding: 2px 4px; }
+  .game-menu-trigger small { display: none; }
+  .game-menu-dialog__hint { margin-inline: 34px; }
+  .game-menu-option { min-height: 60px; }
+}
+
+@media (orientation: portrait) and (max-width: 350px) {
+  .topbar {
+    min-height: 68px;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .brand { display: none; }
+  .mission-copy small { display: none; }
+  .mission-copy span { font-size: 0.67rem; line-height: 1.2; }
+  .hud-stat { min-width: 38px; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 950px) {
+  .mobile-gamepad { grid-template-rows: minmax(0, 1fr); }
+  .virtual-stick,
+  .mobile-primary-actions { grid-row: 1; }
+  .game-menu-trigger { min-width: 42px; min-height: 38px; padding: 1px 4px; }
+  .game-menu-trigger small { display: none; }
+  .game-menu-dialog { width: min(560px, 100%); }
+  .game-menu-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .game-menu-option { min-height: 82px; grid-template-columns: 1fr; place-items: center; text-align: center; }
+  .game-menu-option > span { grid-row: auto; }
 }

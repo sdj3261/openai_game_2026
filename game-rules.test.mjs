@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   MAX_CLONES,
   STAGE_NINE_EFFECTS,
+  canCollectTeamKey,
   canCreateClone,
   canEscape,
   stageNineBlackoutOpacity,
@@ -28,6 +29,15 @@ test("the game allows up to ten clones", () => {
   assert.equal(canCreateClone(10), false);
   assert.equal(canCreateClone(99), false);
   assert.equal(canCreateClone("bad"), false);
+});
+
+test("the current duck and every clone use the same key pickup rule", () => {
+  for (const actorType of ["player", "clone"]) {
+    assert.equal(canCollectTeamKey({ actorType, alreadyCollected: false, distance: 28.99 }), true);
+    assert.equal(canCollectTeamKey({ actorType, alreadyCollected: false, distance: 29 }), false);
+    assert.equal(canCollectTeamKey({ actorType, alreadyCollected: true, distance: 0 }), false);
+  }
+  assert.equal(canCollectTeamKey({ alreadyCollected: false, distance: Number.NaN }), false);
 });
 
 test("stage nine blackout follows one smooth deterministic envelope per loop", () => {
