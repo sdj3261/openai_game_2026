@@ -1529,15 +1529,84 @@ kbd {
 .clear-grade {
   width: min(310px, 100%);
   padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   color: #805b00;
   border: 2px solid #d5a729;
   border-radius: 12px;
   background: #fff2b2;
   font-family: var(--font-mono);
-  font-size: clamp(1.65rem, 7vw, 2.35rem);
+  font-size: 1rem;
   font-weight: 900;
   letter-spacing: 0.025em;
   text-shadow: none;
+}
+
+.clear-grade > b {
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  white-space: nowrap;
+}
+
+.clear-grade > span {
+  color: #6d540e;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  letter-spacing: 0;
+  text-align: right;
+}
+
+.clear-grade > span strong {
+  display: block;
+  margin-top: 2px;
+  color: #805b00;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+}
+
+.grade-criteria {
+  width: min(310px, 100%);
+  padding: 7px 8px;
+  border: 1px solid #d8c681;
+  border-radius: 10px;
+  background: #fff9dc;
+}
+
+.grade-criteria p {
+  margin: 0 0 6px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+}
+
+.grade-criteria p b { color: var(--toy-ink); }
+
+.grade-criteria > div {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.grade-rule {
+  padding: 4px 2px;
+  color: #617184;
+  border: 1px solid #ccd7df;
+  border-radius: 6px;
+  background: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 0.61rem;
+  font-weight: 900;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.grade-rule.is-current {
+  color: #6d4f00;
+  border-color: #d5a729;
+  background: #ffe88a;
 }
 
 .arcade-score {

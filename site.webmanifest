@@ -1,0 +1,23 @@
+{
+  "name": "8초 도둑단",
+  "short_name": "8초 도둑단",
+  "description": "8초 전의 분신과 함께 보석을 훔치는 타임루프 잠입 게임",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#72d9ff",
+  "theme_color": "#72d9ff",
+  "icons": [
+    {
+      "src": "./assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

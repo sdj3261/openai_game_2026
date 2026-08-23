@@ -1,0 +1,8 @@
+Built-in image generation reference:
+assets/sprites/hero-idle-v2/idle-1.png
+
+Prompt:
+Create a crisp square web favicon using a close-up of the referenced turquoise clockwork thief robot's head. Preserve the dark navy rounded visor, two bright mint eyes, cyan helmet, and small gold clockwork key. Simplify it aggressively for recognition at 16x16 and 32x32. Use polished 16-bit pixel art, a centered front-facing composition, high contrast, and a transparent background. No badge, globe, letters, numbers, text, watermark, or extra characters.
+
+Post-processing:
+The generated checkerboard background was removed deterministically, the subject was square-cropped with transparent padding, and PNG/ICO sizes were exported with Pillow.

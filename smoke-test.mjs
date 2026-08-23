@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 
-const expectedVersion = "0.8.1";
+const expectedVersion = "0.8.2";
 const port = 43000 + Math.floor(Math.random() * 1000);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let serverOutput = "";
@@ -42,6 +42,8 @@ try {
     `styles.css?v=${expectedVersion}`,
     `game.js?v=${expectedVersion}`,
     `design-system.css?v=${expectedVersion}`,
+    `favicon.ico?v=${expectedVersion}`,
+    `site.webmanifest?v=${expectedVersion}`,
     'id="virtualStick"',
     'data-game-action="noise"',
     'data-game-action="save"',
@@ -97,6 +99,29 @@ try {
   assert(i18n.includes("export const LANGUAGES") && i18n.includes("export function t") && i18n.includes('gameTitle: "8초 도둑단"') && i18n.includes('"08"'), "Translation catalog or eight-stage copy is missing");
   assert(serverOutput.includes(`http://127.0.0.1:${port}`), "CLI --host did not override LOOP_HEIST_HOST");
 
+  const [faviconResponse, faviconPngResponse, appleIconResponse, manifestResponse] = await Promise.all([
+    fetch(`http://127.0.0.1:${port}/favicon.ico`),
+    fetch(`http://127.0.0.1:${port}/assets/icons/favicon-32.png`),
+    fetch(`http://127.0.0.1:${port}/assets/icons/apple-touch-icon.png`),
+    fetch(`http://127.0.0.1:${port}/site.webmanifest`),
+  ]);
+  assert([faviconResponse, faviconPngResponse, appleIconResponse, manifestResponse].every((asset) => asset.ok), "Favicon or app-icon assets failed to load");
+  const [faviconBuffer, faviconPngBuffer, appleIconBuffer, manifest] = await Promise.all([
+    faviconResponse.arrayBuffer(),
+    faviconPngResponse.arrayBuffer(),
+    appleIconResponse.arrayBuffer(),
+    manifestResponse.json(),
+  ]);
+  const faviconBytes = new Uint8Array(faviconBuffer);
+  const faviconPngBytes = new Uint8Array(faviconPngBuffer);
+  const appleIconBytes = new Uint8Array(appleIconBuffer);
+  assert(faviconBytes.length > 1000 && faviconBytes[0] === 0 && faviconBytes[1] === 0 && faviconBytes[2] === 1 && faviconBytes[3] === 0, "favicon.ico is missing or invalid");
+  assert(faviconResponse.headers.get("content-type")?.startsWith("image/x-icon"), "favicon.ico has the wrong content type");
+  assert(faviconPngBytes[0] === 0x89 && String.fromCharCode(...faviconPngBytes.slice(1, 4)) === "PNG", "32px favicon PNG is missing or invalid");
+  assert(appleIconBytes.length > 1000 && appleIconBytes[0] === 0x89 && String.fromCharCode(...appleIconBytes.slice(1, 4)) === "PNG", "Apple touch icon is missing or invalid");
+  assert(manifest.name === "8초 도둑단" && manifest.icons?.some((icon) => icon.sizes === "512x512"), "Web app manifest is missing required game identity data");
+  assert(manifestResponse.headers.get("content-type")?.startsWith("application/manifest+json"), "Web app manifest has the wrong content type");
+
   const [demoPageResponse, demoVideoResponse, demoPosterResponse, demoVttResponse, demoSrtResponse] = await Promise.all([
     fetch(`http://127.0.0.1:${port}/demo/`),
     fetch(`http://127.0.0.1:${port}/demo/8-second-crew-demo.mp4`),
@@ -120,7 +145,7 @@ try {
   assert(demoVtt.startsWith("WEBVTT") && (demoVtt.match(/-->/g) || []).length === 36, "Demo VTT captions are missing or incomplete");
   assert((demoSrt.match(/-->/g) || []).length === 36, "Demo SRT captions are missing or incomplete");
 
-  console.log(`Smoke test passed: 8초 도둑단 v${expectedVersion}, HTTP ${response.status}, game + mobile + demo media assets`);
+  console.log(`Smoke test passed: 8초 도둑단 v${expectedVersion}, HTTP ${response.status}, game + mobile + favicon + demo media assets`);
 } finally {
   if (child.exitCode === null) {
     child.kill();

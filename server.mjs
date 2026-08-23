@@ -23,10 +23,12 @@ const mime = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".vtt": "text/vtt; charset=utf-8",
   ".srt": "application/x-subrip; charset=utf-8",
   ".mp4": "video/mp4",
   ".png": "image/png",
+  ".ico": "image/x-icon",
   ".gif": "image/gif",
   ".woff2": "font/woff2",
 };
